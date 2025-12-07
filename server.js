@@ -2,14 +2,22 @@
 // Ek hi file me: backend (Node.js + Express) + frontend (HTML page)
 
 // ====== CONFIG: Yahan apni Razorpay keys dalo ======
-const RAZORPAY_KEY_ID = "rzp_test_xxxxxxxxxxxxxxxx";      // 🔴 apna KEY ID
-const RAZORPAY_KEY_SECRET = "xxxxxxxxxxxxxxxxxxxx";   // 🔴 apna KEY SECRET
+// server.js
+// Ek hi file me: backend (Node.js + Express) + frontend (HTML page)
+
+// ====== ENV LOAD (local .env + Render env) ======
+require("dotenv").config();
+
+// ====== CONFIG: Razorpay keys env se lo ======
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_rzp_live_RodivHVsenoOgh";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "GVgxYqWoWBMiZPXqnUyqMRDs";
 
 // ====== Dependencies ======
 const express = require("express");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const bodyParser = require("body-parser");
+
 
 const app = express();
 app.use(bodyParser.json());
@@ -1147,11 +1155,15 @@ app.post("/verify-payment", function (req, res) {
     } else {
       return res.json({ success: false, message: "Invalid payment signature" });
     }
-  } catch (err) {
-    console.error("Error verifying payment:", err);
-    return res.json({ success: false, error: "Failed to verify payment" });
+    } catch (err) {
+    console.error("Error creating Razorpay order:", err);
+    return res.json({
+      success: false,
+      error: (err && (err.description || err.message)) || "Failed to create order"
+    });
   }
 });
+
 
 // ====== Start server ======
 const PORT = 3000;
