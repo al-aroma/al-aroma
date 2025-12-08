@@ -1,4 +1,4 @@
-// Load environment variables from .env
+// Load environment variables from .env (local) or Render env vars
 require("dotenv").config();
 
 const express = require("express");
@@ -15,8 +15,8 @@ const PORT = process.env.PORT || 3000;
 // ====== BASIC CONFIG ======
 const BRAND_NAME = "Al Aroma Spices";
 const BRAND_TAGLINE = "We deliver fresh, high-quality spices for your kitchen.";
-const PHONE_DISPLAY = "+91-9876543210";     // apna number
-const PHONE_WHATSAPP = "919876543210";      // WhatsApp ke liye (country code + number, bina +)
+const PHONE_DISPLAY = "+91-9876543210"; // apna number
+const PHONE_WHATSAPP = "919876543210"; // WhatsApp ke liye (country code + number, bina +)
 const EMAIL_ID = "alaroma.spices@gmail.com";
 const ADDRESS_LINE = "Pune, Maharashtra, India";
 const CURRENT_YEAR = new Date().getFullYear();
@@ -32,14 +32,27 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/invoices", express.static(INVOICES_DIR)); // serve invoice PDFs
 
-// ====== RAZORPAY CLIENT ======
-const rzp = new Razorpay({
-  key_id: process.env.RZP_KEY_ID || "",
-  key_secret: process.env.RZP_KEY_SECRET || "",
-});
+// ====== RAZORPAY CLIENT (SAFE INIT) ======
+const RZP_KEY_ID = process.env.RZP_KEY_ID;
+const RZP_KEY_SECRET = process.env.RZP_KEY_SECRET;
 
-// yeh line check ke liye: .env se key load ho rahi hai ya nahi
-console.log("Loaded Razorpay Key:", process.env.RZP_KEY_ID);
+// helpful logs to debug Render env vars
+console.log("RZP_KEY_ID from env:", JSON.stringify(RZP_KEY_ID));
+console.log("RZP_KEY_SECRET present?:", !!RZP_KEY_SECRET);
+
+let rzp = null;
+
+if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
+  console.error(
+    "❌ Razorpay env vars missing! Please set RZP_KEY_ID and RZP_KEY_SECRET in .env (local) or Render Environment."
+  );
+} else {
+  rzp = new Razorpay({
+    key_id: RZP_KEY_ID,
+    key_secret: RZP_KEY_SECRET,
+  });
+  console.log("✅ Razorpay client initialised.");
+}
 
 // ====== PRODUCTS ======
 const PRODUCTS = [
@@ -777,6 +790,12 @@ app.get("/contact", (req, res) => {
 // ====== CREATE ORDER (RAZORPAY) USING CART ITEMS ======
 app.post("/create-order", async (req, res) => {
   try {
+    if (!rzp) {
+      return res
+        .status(500)
+        .json({ error: "Payment gateway not configured on server." });
+    }
+
     const { items } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
@@ -808,13 +827,18 @@ app.post("/create-order", async (req, res) => {
       id: order.id,
       amount: order.amount,
       currency: order.currency,
-      key: process.env.RZP_KEY_ID || "",
+      key: RZP_KEY_ID || "",
       receipt: order.receipt,
       status: order.status,
     });
   } catch (err) {
     console.error("Create order error:", err);
-    res.status(500).json({ error: err.description || err.message || "Server error" });
+    const description =
+      (err && err.error && err.error.description) ||
+      err.description ||
+      err.message ||
+      "Server error";
+    res.status(500).json({ error: description });
   }
 });
 
@@ -833,7 +857,7 @@ app.post("/verify-payment", async (req, res) => {
     }
 
     const generatedSignature = crypto
-      .createHmac("sha256", process.env.RZP_KEY_SECRET || "")
+      .createHmac("sha256", RZP_KEY_SECRET || "")
       .update(razorpay_order_id + "|" + razorpay_payment_id)
       .digest("hex");
 
@@ -916,5 +940,7 @@ app.post("/verify-payment", async (req, res) => {
 // ====== START SERVER ======
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
-  console.log("Ensure you set RZP_KEY_ID and RZP_KEY_SECRET in .env or Render env vars");
+  console.log(
+    "Ensure you set RZP_KEY_ID and RZP_KEY_SECRET in .env (local) or Render env vars"
+  );
 });
