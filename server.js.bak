@@ -1,0 +1,324 @@
+// server.js
+// Single-file Node.js + Express app with Razorpay order creation and PDF invoice generation.
+// Usage: create .env (see README below), npm install, then node server.js
+
+require('dotenv').config(); // must be at top
+const express = require('express');
+const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
+const PDFDocument = require('pdfkit');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Ensure invoices folder exists
+const INVOICES_DIR = path.join(__dirname, 'invoices');
+if (!fs.existsSync(INVOICES_DIR)) fs.mkdirSync(INVOICES_DIR, { recursive: true });
+
+// middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/invoices', express.static(INVOICES_DIR)); // serve invoice PDFs
+
+// Razorpay client
+const rzp = new Razorpay({
+  key_id: process.env.RZP_KEY_ID || '',
+  key_secret: process.env.RZP_KEY_SECRET || ''
+});
+
+// sample products (edit images/prices/names as you like)
+const PRODUCTS = [
+  {
+    id: "p001",
+    name: "Al Aroma Garam Masala (100g)",
+    price: 120.00, // in rupees
+    img: "https://via.placeholder.com/320x240?text=Garam+Masala",
+    desc: "Premium garam masala for rich flavour."
+  },
+  {
+    id: "p002",
+    name: "Al Aroma Turmeric Powder (200g)",
+    price: 150.00,
+    img: "https://via.placeholder.com/320x240?text=Turmeric",
+    desc: "High-quality turmeric powder."
+  },
+  {
+    id: "p003",
+    name: "Al Aroma Red Chili (100g)",
+    price: 80.00,
+    img: "https://via.placeholder.com/320x240?text=Red+Chili",
+    desc: "Spicy and fresh red chili powder."
+  }
+];
+
+// Serve single-page site
+app.get('/', (req, res) => {
+  const productCards = PRODUCTS.map(p => `
+    <div class="card">
+      <img src="${p.img}" alt="${p.name}" />
+      <h3>${p.name}</h3>
+      <p>${p.desc}</p>
+      <div class="price">₹ ${p.price.toFixed(2)}</div>
+      <div class="controls">
+        <input type="number" min="1" value="1" data-id="${p.id}" class="qty" />
+        <button data-id="${p.id}" class="orderBtn">Order</button>
+      </div>
+    </div>
+  `).join('\n');
+
+  res.send(`<!doctype html>
+  <html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Al Aroma Spices — Order</title>
+    <style>
+      body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:0; padding:0; background:#f6f6f8; }
+      header { background:#0f4c81; color:white; padding:20px; text-align:center; }
+      .container { max-width:1100px; margin:24px auto; padding:12px; }
+      .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+      .card { background:white; padding:12px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.06); text-align:center; }
+      .card img { width:100%; height:160px; object-fit:cover; border-radius:8px; }
+      .price { font-weight:700; margin-top:8px; }
+      .controls { margin-top:10px; display:flex; gap:8px; justify-content:center; align-items:center; }
+      .qty { width:64px; padding:6px; border-radius:6px; border:1px solid #ddd; text-align:center; }
+      button.orderBtn { background:#ff7a00; color:white; padding:8px 12px; border:0; border-radius:8px; cursor:pointer; }
+      footer { text-align:center; margin:28px 0; color:#444; }
+      .info { margin-bottom:12px; color:#222; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
+      .contact { font-size:14px; color:#fff; opacity:0.9; }
+      .loader { display:none; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Al Aroma Spices</h1>
+      <div class="contact">Call / WhatsApp: +91-XXXXXXXXXX &nbsp; | &nbsp; Email: info@alaroma.example</div>
+    </header>
+
+    <main class="container">
+      <div class="info">
+        <div><strong>Products</strong></div>
+        <div>Checkout uses Razorpay. (You will be redirected to payment popup.)</div>
+      </div>
+
+      <div class="grid">${productCards}</div>
+
+      <div style="margin-top:18px; text-align:center;">
+        <small>Tip: edit products directly inside server.js to change catalog, price, or image.</small>
+      </div>
+
+      <div id="message" style="margin-top:20px; text-align:center;"></div>
+    </main>
+
+    <footer>
+      © ${new Date().getFullYear()} Al Aroma Spices — Pune, India
+    </footer>
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+      const orderBtns = document.querySelectorAll('.orderBtn');
+      const messageEl = document.getElementById('message');
+
+      function showMessage(html, timeout=7000) {
+        messageEl.innerHTML = html;
+        setTimeout(()=> messageEl.innerHTML = '', timeout);
+      }
+
+      async function createOrderOnServer(payload) {
+        const res = await fetch('/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        return res.json();
+      }
+
+      async function verifyPaymentOnServer(payload) {
+        const res = await fetch('/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        return res.json();
+      }
+
+      orderBtns.forEach(btn => {
+        btn.addEventListener('click', async (ev) => {
+          const id = btn.getAttribute('data-id');
+          const qtyInput = document.querySelector(\`input.qty[data-id="\${id}"]\`);
+          const qty = Math.max(1, parseInt(qtyInput.value || '1'));
+          const product = ${JSON.stringify(PRODUCTS)}.find(p=>p.id===id);
+          if(!product) return showMessage('Product not found');
+
+          // Create order on server (server will create Razorpay order)
+          const payload = {
+            productId: product.id,
+            productName: product.name,
+            unitPrice: product.price,
+            quantity: qty
+          };
+
+          showMessage('Creating order...');
+          let orderResp;
+          try {
+            orderResp = await createOrderOnServer(payload);
+          } catch (e) {
+            console.error(e);
+            return showMessage('Network/server error. See console.');
+          }
+
+          if (orderResp.error) {
+            return showMessage('Server error: ' + (orderResp.error || 'unknown'));
+          }
+
+          // orderResp should have { id: 'order_...', amount, currency, key }
+          const options = {
+            key: orderResp.key, // razorpay key id (public)
+            amount: orderResp.amount, // in paise
+            currency: orderResp.currency,
+            name: 'Al Aroma Spices',
+            description: product.name + ' x ' + qty,
+            order_id: orderResp.id,
+            handler: async function (response) {
+              // response: razorpay_payment_id, razorpay_order_id, razorpay_signature
+              showMessage('Verifying payment, please wait...');
+              try {
+                const verifyResp = await verifyPaymentOnServer({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  productName: product.name,
+                  quantity: qty,
+                  unitPrice: product.price
+                });
+                if (verifyResp && verifyResp.success) {
+                  // show invoice/download link
+                  const link = verifyResp.invoiceUrl ? '<a href="'+verifyResp.invoiceUrl+'" target="_blank">Download Invoice</a>' : '';
+                  showMessage('Payment successful! ' + link, 15000);
+                } else {
+                  showMessage('Payment verification failed. Contact support.');
+                }
+              } catch (err) {
+                console.error(err);
+                showMessage('Verification error. See console.');
+              }
+            },
+            prefill: {
+              name: '',
+              email: '',
+              contact: ''
+            },
+            notes: { product_id: product.id },
+            theme: { color: '#ff7a00' }
+          };
+
+          const rzpObj = new Razorpay(options);
+          rzpObj.open();
+        });
+      });
+    </script>
+  </body>
+  </html>`);
+});
+
+// Create Razorpay order endpoint (server-side)
+app.post('/create-order', async (req, res) => {
+  try {
+    const { productId, productName, unitPrice, quantity } = req.body;
+    if (!productId || !unitPrice || !quantity) return res.status(400).json({ error: 'Invalid order data' });
+
+    const amountPaise = Math.round(Number(unitPrice) * Number(quantity) * 100); // rupees -> paise
+    if (!amountPaise || amountPaise < 100) {
+      // Razorpay may have a minimum amount, adjust as needed
+      // Here we allow small orders but you can set a minimum
+    }
+
+    const options = {
+      amount: amountPaise,
+      currency: "INR",
+      receipt: `rcpt_${Date.now()}`,
+      payment_capture: 1
+    };
+
+    const order = await rzp.orders.create(options);
+    // return order and public key to client
+    res.json({
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key: process.env.RZP_KEY_ID || '',
+      receipt: order.receipt,
+      status: order.status
+    });
+  } catch (err) {
+    console.error('Create order error:', err);
+    res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
+// Verify payment endpoint (after checkout handler runs on client)
+app.post('/verify-payment', async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, productName, quantity, unitPrice } = req.body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Missing verification fields' });
+    }
+
+    const generatedSignature = require('crypto').createHmac('sha256', process.env.RZP_KEY_SECRET || '')
+      .update(razorpay_order_id + '|' + razorpay_payment_id)
+      .digest('hex');
+
+    if (generatedSignature !== razorpay_signature) {
+      console.warn('Signature mismatch', generatedSignature, razorpay_signature);
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+
+    // Invoice generation (example)
+    const fs = require('fs');
+    const path = require('path');
+    const PDFDocument = require('pdfkit');
+    const INVOICES_DIR = path.join(__dirname, 'invoices');
+    if (!fs.existsSync(INVOICES_DIR)) fs.mkdirSync(INVOICES_DIR, { recursive: true });
+
+    const invoiceFilename = invoice_.pdf;
+    const invoicePath = path.join(INVOICES_DIR, invoiceFilename);
+    const doc = new PDFDocument({ margin: 50 });
+    const writeStream = fs.createWriteStream(invoicePath);
+    doc.pipe(writeStream);
+
+    // Simple invoice content
+    doc.fontSize(20).text('Al Aroma Spices', { align: 'left' });
+    doc.moveDown();
+    const qty = Number(quantity || 1);
+    const unit = Number(unitPrice || 0);
+    const total = (qty * unit).toFixed(2);
+    doc.fontSize(12).text(Item: );
+    doc.text(Qty: );
+    doc.text(Unit: ₹);
+    doc.text(Total: ₹);
+    doc.moveDown();
+    doc.text('Payment ID: ' + razorpay_payment_id);
+    doc.end();
+
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
+
+    const invoiceUrl = /invoices/;
+    return res.json({ success: true, invoiceUrl });
+
+  } catch (err) {
+    console.error('Verify payment error:', err);
+    return res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
+// start server
+app.listen(PORT, () => {
+  console.log(Server listening on http://localhost:);
+  console.log('Ensure you set RZP_KEY_ID and RZP_KEY_SECRET in .env');
+});
