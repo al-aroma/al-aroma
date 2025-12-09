@@ -1,4 +1,4 @@
-// Load environment variables from .env
+// Load environment variables (.env for local, Render env vars on server)
 require("dotenv").config();
 
 const express = require("express");
@@ -15,8 +15,8 @@ const PORT = process.env.PORT || 3000;
 // ====== BASIC CONFIG ======
 const BRAND_NAME = "Al Aroma Spices";
 const BRAND_TAGLINE = "We deliver fresh, high-quality spices for your kitchen.";
-const PHONE_DISPLAY = "+91-9876543210";     // apna number
-const PHONE_WHATSAPP = "919876543210";      // WhatsApp ke liye (country code + number, bina +)
+const PHONE_DISPLAY = "+91-9876543210"; // apna number daal sakte ho
+const PHONE_WHATSAPP = "919876543210";  // WhatsApp link (country code + number, bina +)
 const EMAIL_ID = "alaroma.spices@gmail.com";
 const ADDRESS_LINE = "Pune, Maharashtra, India";
 const CURRENT_YEAR = new Date().getFullYear();
@@ -36,12 +36,11 @@ app.use("/invoices", express.static(INVOICES_DIR)); // serve invoice PDFs
 const RZP_KEY_ID = (process.env.RZP_KEY_ID || "").trim();
 const RZP_KEY_SECRET = (process.env.RZP_KEY_SECRET || "").trim();
 
-// helpful logs to debug Render env vars
+// helpful logs
 console.log("RZP_KEY_ID from env:", JSON.stringify(RZP_KEY_ID));
 console.log("RZP_KEY_SECRET present?:", !!RZP_KEY_SECRET);
 
 let rzp = null;
-
 if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
   console.error(
     "❌ Razorpay env vars missing! Please set RZP_KEY_ID and RZP_KEY_SECRET in .env (local) or Render Environment."
@@ -82,344 +81,331 @@ const PRODUCTS = [
 // ====== COMMON LAYOUT FUNCTION ======
 function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = "" }) {
   return `<!doctype html>
-  <html lang="en">
-  <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>${title}</title>
-    <style>
-      * { box-sizing: border-box; }
-      body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin:0; padding:0; background:#f4f5fb; color:#222; }
-      a { text-decoration:none; color:inherit; }
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin:0; padding:0; background:#f4f5fb; color:#222; }
+    a { text-decoration:none; color:inherit; }
 
-      header {
-        background:#0f4c81;
-        color:#fff;
-        padding:10px 16px;
-        position:sticky;
-        top:0;
-        z-index:10;
-      }
-      .topbar {
-        max-width:1100px;
-        margin:0 auto;
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:12px;
-        flex-wrap:wrap;
-      }
-      .logo {
-        font-weight:800;
-        font-size:22px;
-        letter-spacing:0.03em;
-      }
-      .contact-top {
-        font-size:12px;
-        opacity:0.9;
-        text-align:right;
-      }
-      nav {
-        margin-top:6px;
-        font-size:14px;
-      }
-      .nav-link {
-        margin-right:16px;
-        opacity:0.9;
-      }
-      .nav-link.active {
-        font-weight:600;
-        opacity:1;
-        border-bottom:2px solid #ffd36b;
-        padding-bottom:2px;
-      }
+    header {
+      background:#0f4c81;
+      color:#fff;
+      padding:10px 16px;
+      position:sticky;
+      top:0;
+      z-index:10;
+    }
+    .topbar {
+      max-width:1100px;
+      margin:0 auto;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .logo {
+      font-weight:800;
+      font-size:22px;
+      letter-spacing:0.03em;
+    }
+    .contact-top {
+      font-size:12px;
+      opacity:0.9;
+      text-align:right;
+    }
+    nav {
+      margin-top:6px;
+      font-size:14px;
+    }
+    .nav-link {
+      margin-right:16px;
+      opacity:0.9;
+    }
+    .nav-link.active {
+      font-weight:600;
+      opacity:1;
+      border-bottom:2px solid #ffd36b;
+      padding-bottom:2px;
+    }
 
-      .container {
-        max-width:1100px;
-        margin:22px auto;
-        padding:0 14px;
-      }
+    .container {
+      max-width:1100px;
+      margin:22px auto;
+      padding:0 14px;
+    }
 
-      .hero {
-        background:#0f4c81;
-        color:#fff;
-        padding:24px 16px 30px;
-      }
+    .hero {
+      background:#0f4c81;
+      color:#fff;
+      padding:24px 16px 30px;
+    }
+    .hero-inner {
+      max-width:1100px;
+      margin:0 auto;
+      display:grid;
+      grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
+      gap:24px;
+      align-items:center;
+    }
+    .hero h1 {
+      margin:0 0 8px;
+      font-size:32px;
+    }
+    .hero p {
+      margin:0 0 14px;
+      font-size:15px;
+    }
+    .hero-highlights {
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:8px;
+    }
+    .pill {
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.4);
+      padding:4px 10px;
+      font-size:12px;
+    }
+    .hero-box {
+      background:rgba(255,255,255,0.12);
+      border-radius:16px;
+      padding:14px;
+      font-size:13px;
+      box-shadow:0 8px 24px rgba(0,0,0,0.18);
+    }
+
+    h2.section-title {
+      font-size:20px;
+      margin:0 0 4px;
+    }
+    .section-sub {
+      font-size:13px;
+      color:#555;
+      margin-bottom:16px;
+    }
+
+    .grid-products {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap:18px;
+    }
+    .card {
+      background:#fff;
+      border-radius:16px;
+      padding:14px;
+      box-shadow:0 10px 26px rgba(15,18,40,0.08);
+      text-align:center;
+    }
+    .card img {
+      width:100%;
+      height:170px;
+      border-radius:12px;
+      object-fit:cover;
+      background:#eee;
+    }
+    .card h3 {
+      margin:10px 0 4px;
+      font-size:17px;
+    }
+    .card .desc {
+      font-size:13px;
+      color:#555;
+      min-height:34px;
+    }
+    .price {
+      font-weight:700;
+      margin-top:8px;
+      font-size:16px;
+    }
+    .controls {
+      margin-top:10px;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+    }
+    .qty {
+      width:70px;
+      padding:6px;
+      border-radius:8px;
+      border:1px solid #d0d0d0;
+      text-align:center;
+      font-size:13px;
+    }
+    button.primary-btn {
+      background:#ff7a00;
+      color:#fff;
+      border:0;
+      border-radius:999px;
+      padding:8px 16px;
+      font-size:14px;
+      cursor:pointer;
+      font-weight:600;
+      box-shadow:0 8px 20px rgba(255,122,0,0.45);
+    }
+    button.primary-btn:hover {
+      filter:brightness(0.95);
+    }
+
+    .two-col {
+      display:grid;
+      grid-template-columns: minmax(0,1.2fr) minmax(0,1fr);
+      gap:20px;
+      align-items:flex-start;
+      margin-top:10px;
+    }
+    .card-soft {
+      background:#fff;
+      border-radius:16px;
+      padding:14px 16px;
+      box-shadow:0 10px 25px rgba(0,0,0,0.04);
+      font-size:13px;
+    }
+    .card-soft h3 {
+      margin-top:0;
+      margin-bottom:6px;
+      font-size:16px;
+    }
+    .card-soft ul {
+      padding-left:18px;
+      margin:4px 0 8px;
+    }
+    .card-soft li {
+      margin-bottom:4px;
+    }
+
+    .cart-table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+    }
+    .cart-table th,
+    .cart-table td {
+      border-bottom:1px solid #eee;
+      padding:6px 4px;
+      text-align:left;
+    }
+    .cart-total-row {
+      font-weight:bold;
+    }
+    .cart-empty {
+      font-size:12px;
+      color:#777;
+    }
+
+    footer {
+      margin-top:24px;
+      background:#0f4c81;
+      color:#fff;
+      padding:18px 14px;
+    }
+    .footer-inner {
+      max-width:1100px;
+      margin:0 auto;
+      font-size:13px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      justify-content:space-between;
+      align-items:center;
+    }
+    .footer-contact {
+      line-height:1.5;
+    }
+
+    .wa-btn {
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      background:#25D366;
+      color:#fff;
+      padding:9px 14px;
+      border-radius:999px;
+      font-size:14px;
+      font-weight:600;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      box-shadow:0 10px 26px rgba(0,0,0,0.3);
+    }
+
+    form.contact-form {
+      display:grid;
+      gap:10px;
+      margin-top:10px;
+    }
+    .contact-form input,
+    .contact-form textarea {
+      padding:8px;
+      border-radius:8px;
+      border:1px solid #ccc;
+      font-size:13px;
+    }
+    .contact-form button {
+      background:#0f4c81;
+      color:#fff;
+      border:0;
+      border-radius:999px;
+      padding:8px 16px;
+      font-size:14px;
+      cursor:pointer;
+    }
+
+    @media (max-width: 800px) {
       .hero-inner {
-        max-width:1100px;
-        margin:0 auto;
-        display:grid;
-        grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
-        gap:24px;
-        align-items:center;
+        grid-template-columns: minmax(0,1fr);
       }
-      .hero h1 {
-        margin:0 0 8px;
-        font-size:32px;
-      }
-      .hero p {
-        margin:0 0 14px;
-        font-size:15px;
-      }
-      .hero-highlights {
-        display:flex;
-        flex-wrap:wrap;
-        gap:10px;
-        margin-top:8px;
-      }
-      .pill {
-        border-radius:999px;
-        border:1px solid rgba(255,255,255,0.4);
-        padding:4px 10px;
-        font-size:12px;
-      }
-      .hero-box {
-        background:rgba(255,255,255,0.12);
-        border-radius:16px;
-        padding:14px;
-        font-size:13px;
-        box-shadow:0 8px 24px rgba(0,0,0,0.18);
-      }
-
-      h2.section-title {
-        font-size:20px;
-        margin:0 0 4px;
-      }
-      .section-sub {
-        font-size:13px;
-        color:#555;
-        margin-bottom:16px;
-      }
-
-      .grid-products {
-        display:grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap:18px;
-      }
-      .card {
-        background:#fff;
-        border-radius:16px;
-        padding:14px;
-        box-shadow:0 10px 26px rgba(15,18,40,0.08);
-        text-align:center;
-      }
-      .card img {
-        width:100%;
-        height:170px;
-        border-radius:12px;
-        object-fit:cover;
-        background:#eee;
-      }
-      .card h3 {
-        margin:10px 0 4px;
-        font-size:17px;
-      }
-      .card .desc {
-        font-size:13px;
-        color:#555;
-        min-height:34px;
-      }
-      .price {
-        font-weight:700;
-        margin-top:8px;
-        font-size:16px;
-      }
-      .controls {
-        margin-top:10px;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        gap:8px;
-      }
-      .qty {
-        width:70px;
-        padding:6px;
-        border-radius:8px;
-        border:1px solid #d0d0d0;
-        text-align:center;
-        font-size:13px;
-      }
-      button.primary-btn {
-        background:#ff7a00;
-        color:#fff;
-        border:0;
-        border-radius:999px;
-        padding:8px 16px;
-        font-size:14px;
-        cursor:pointer;
-        font-weight:600;
-        box-shadow:0 8px 20px rgba(255,122,0,0.45);
-      }
-      button.primary-btn:hover {
-        filter:brightness(0.95);
-      }
-
       .two-col {
-        display:grid;
-        grid-template-columns: minmax(0,1.2fr) minmax(0,1fr);
-        gap:20px;
-        align-items:flex-start;
-        margin-top:10px;
+        grid-template-columns: minmax(0,1fr);
       }
-      .card-soft {
-        background:#fff;
-        border-radius:16px;
-        padding:14px 16px;
-        box-shadow:0 10px 25px rgba(0,0,0,0.04);
-        font-size:13px;
-      }
-      .card-soft h3 {
-        margin-top:0;
-        margin-bottom:6px;
-        font-size:16px;
-      }
-      .card-soft ul {
-        padding-left:18px;
-        margin:4px 0 8px;
-      }
-      .card-soft li {
-        margin-bottom:4px;
-      }
-      .badge-list {
-        display:flex;
-        flex-wrap:wrap;
-        gap:8px;
-        margin-top:6px;
-      }
-      .badge {
-        padding:4px 8px;
-        border-radius:999px;
-        border:1px solid #e0e0e0;
-        font-size:11px;
-      }
-
-      /* CART */
-      .cart-table {
-        width:100%;
-        border-collapse:collapse;
-        font-size:12px;
-      }
-      .cart-table th,
-      .cart-table td {
-        border-bottom:1px solid #eee;
-        padding:6px 4px;
-        text-align:left;
-      }
-      .cart-total-row {
-        font-weight:bold;
-      }
-      .cart-empty {
-        font-size:12px;
-        color:#777;
-      }
-
-      footer {
-        margin-top:24px;
-        background:#0f4c81;
-        color:#fff;
-        padding:18px 14px;
-      }
-      .footer-inner {
-        max-width:1100px;
-        margin:0 auto;
-        font-size:13px;
-        display:flex;
-        flex-wrap:wrap;
-        gap:10px;
-        justify-content:space-between;
-        align-items:center;
-      }
-      .footer-contact {
-        line-height:1.5;
-      }
-
-      .wa-btn {
-        position:fixed;
-        right:18px;
-        bottom:18px;
-        background:#25D366;
-        color:#fff;
-        padding:9px 14px;
-        border-radius:999px;
-        font-size:14px;
-        font-weight:600;
-        display:flex;
-        align-items:center;
-        gap:6px;
-        box-shadow:0 10px 26px rgba(0,0,0,0.3);
-      }
-
-      form.contact-form {
-        display:grid;
-        gap:10px;
-        margin-top:10px;
-      }
-      .contact-form input,
-      .contact-form textarea {
-        padding:8px;
-        border-radius:8px;
-        border:1px solid #ccc;
-        font-size:13px;
-      }
-      .contact-form button {
-        background:#0f4c81;
-        color:#fff;
-        border:0;
-        border-radius:999px;
-        padding:8px 16px;
-        font-size:14px;
-        cursor:pointer;
-      }
-
-      @media (max-width: 800px) {
-        .hero-inner {
-          grid-template-columns: minmax(0,1fr);
-        }
-        .two-col {
-          grid-template-columns: minmax(0,1fr);
-        }
-        header { position:static; }
-        .hero { padding-top:16px; }
-      }
-    </style>
-    ${extraHead}
-  </head>
-  <body>
-    <header>
-      <div class="topbar">
-        <div>
-          <div class="logo">${BRAND_NAME}</div>
-          <nav>
-            <a href="/" class="nav-link ${active === "home" ? "active" : ""}">Home</a>
-            <a href="/about" class="nav-link ${active === "about" ? "active" : ""}">About</a>
-            <a href="/contact" class="nav-link ${active === "contact" ? "active" : ""}">Contact</a>
-          </nav>
-        </div>
-        <div class="contact-top">
-          Call / WhatsApp: ${PHONE_DISPLAY}<br/>
-          Email: ${EMAIL_ID}
-        </div>
+      header { position:static; }
+      .hero { padding-top:16px; }
+    }
+  </style>
+  ${extraHead}
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <div class="logo">${BRAND_NAME}</div>
+        <nav>
+          <a href="/" class="nav-link ${active === "home" ? "active" : ""}">Home</a>
+          <a href="/about" class="nav-link ${active === "about" ? "active" : ""}">About</a>
+          <a href="/contact" class="nav-link ${active === "contact" ? "active" : ""}">Contact</a>
+        </nav>
       </div>
-    </header>
-
-    ${bodyHtml}
-
-    <footer>
-      <div class="footer-inner">
-        <div>© ${CURRENT_YEAR} ${BRAND_NAME} — ${ADDRESS_LINE}</div>
-        <div class="footer-contact">
-          Ph: ${PHONE_DISPLAY} &nbsp; | &nbsp; Email: ${EMAIL_ID}
-        </div>
+      <div class="contact-top">
+        Call / WhatsApp: ${PHONE_DISPLAY}<br/>
+        Email: ${EMAIL_ID}
       </div>
-    </footer>
+    </div>
+  </header>
 
-    <a class="wa-btn" href="https://wa.me/${PHONE_WHATSAPP}?text=Hi%20Al%20Aroma%20Spices%2C%20I%20want%20to%20order%20spices." target="_blank">
-      WhatsApp Order
-    </a>
+  ${bodyHtml}
 
-    ${extraScripts}
-  </body>
-  </html>`;
+  <footer>
+    <div class="footer-inner">
+      <div>© ${CURRENT_YEAR} ${BRAND_NAME} — ${ADDRESS_LINE}</div>
+      <div class="footer-contact">
+        Ph: ${PHONE_DISPLAY} &nbsp; | &nbsp; Email: ${EMAIL_ID}
+      </div>
+    </div>
+  </footer>
+
+  <a class="wa-btn" href="https://wa.me/${PHONE_WHATSAPP}?text=Hi%20Al%20Aroma%20Spices%2C%20I%20want%20to%20order%20spices." target="_blank">
+    WhatsApp Order
+  </a>
+
+  ${extraScripts}
+</body>
+</html>`;
 }
 
 // ====== HOME PAGE (PRODUCTS + CART + PAYMENT) ======
@@ -457,7 +443,7 @@ app.get("/", (req, res) => {
             <li>Products se quantity select karke <b>Add to cart</b> pe click karein.</li>
             <li>Cart me sab items check karke <b>Pay & Checkout</b> click karein.</li>
             <li>Payment Razorpay ke through hoga (UPI / Card / NetBanking).</li>
-            <li>Payment ke baad aapke liye automatic <b>PDF invoice</b> generate hoga.</li>
+            <li>Payment ke baad automatic <b>PDF invoice</b> generate hoga.</li>
           </ul>
           <div style="font-size:11px; opacity:0.85; margin-top:6px;">
             *Delivery charges extra as per location.
@@ -523,169 +509,171 @@ app.get("/", (req, res) => {
   const extraHead = `<script src="https://checkout.razorpay.com/v1/checkout.js"></script>`;
 
   const extraScripts = `<script>
-      const products = ${JSON.stringify(PRODUCTS)};
-      let cart = [];
+    const products = ${JSON.stringify(PRODUCTS)};
+    let cart = [];
 
-      const addButtons = document.querySelectorAll('.addCartBtn');
-      const messageEl = document.getElementById('message');
-      const cartBody = document.getElementById('cart-body');
-      const cartTotalEl = document.getElementById('cart-total');
-      const checkoutBtn = document.getElementById('checkoutBtn');
+    const addButtons = document.querySelectorAll('.addCartBtn');
+    const messageEl = document.getElementById('message');
+    const cartBody = document.getElementById('cart-body');
+    const cartTotalEl = document.getElementById('cart-total');
+    const checkoutBtn = document.getElementById('checkoutBtn');
 
-      function showMessage(html, timeout) {
-        if (!messageEl) return;
-        messageEl.innerHTML = html;
-        if (timeout) {
-          setTimeout(function(){ messageEl.innerHTML = ''; }, timeout);
-        }
+    function showMessage(html, timeout) {
+      if (!messageEl) return;
+      messageEl.innerHTML = html;
+      if (timeout) {
+        setTimeout(function(){ messageEl.innerHTML = ''; }, timeout);
       }
+    }
 
-      function renderCart() {
-        if (!cartBody || !cartTotalEl) return;
+    function renderCart() {
+      if (!cartBody || !cartTotalEl) return;
+      if (!cart.length) {
+        cartBody.innerHTML = '<tr><td colspan="3" class="cart-empty">No items in cart yet.</td></tr>';
+        cartTotalEl.textContent = '0.00';
+        return;
+      }
+      let total = 0;
+      let rows = '';
+      cart.forEach(function(item) {
+        var p = products.find(function(pr){ return pr.id === item.id; });
+        if (!p) return;
+        var lineTotal = p.price * item.qty;
+        total += lineTotal;
+        rows += '<tr>' +
+          '<td>' + p.name + '</td>' +
+          '<td>' + item.qty + '</td>' +
+          '<td>' + lineTotal.toFixed(2) + '</td>' +
+        '</tr>';
+      });
+      cartBody.innerHTML = rows;
+      cartTotalEl.textContent = total.toFixed(2);
+    }
+
+    function addToCart(productId, qty) {
+      if (qty <= 0) qty = 1;
+      var existing = cart.find(function(i){ return i.id === productId; });
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        cart.push({ id: productId, qty: qty });
+      }
+      renderCart();
+      showMessage('Item added to cart.', 3000);
+    }
+
+    addButtons.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var qtyInput = document.querySelector('input.qty[data-id="' + id + '"]');
+        var qty = parseInt((qtyInput && qtyInput.value) || '1', 10);
+        if (isNaN(qty) || qty < 1) qty = 1;
+        addToCart(id, qty);
+      });
+    });
+
+    async function createOrderOnServer(payload) {
+      var res = await fetch('/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return res.json();
+    }
+
+    async function verifyPaymentOnServer(payload) {
+      var res = await fetch('/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return res.json();
+    }
+
+    if (checkoutBtn) {
+      checkoutBtn.addEventListener('click', async function(){
         if (!cart.length) {
-          cartBody.innerHTML = '<tr><td colspan="3" class="cart-empty">No items in cart yet.</td></tr>';
-          cartTotalEl.textContent = '0.00';
+          showMessage('Your cart is empty.', 4000);
           return;
         }
-        let total = 0;
-        let rows = '';
-        cart.forEach(function(item) {
-          var p = products.find(function(pr){ return pr.id === item.id; });
-          if (!p) return;
-          var lineTotal = p.price * item.qty;
-          total += lineTotal;
-          rows += '<tr>' +
-            '<td>' + p.name + '</td>' +
-            '<td>' + item.qty + '</td>' +
-            '<td>' + lineTotal.toFixed(2) + '</td>' +
-          '</tr>';
-        });
-        cartBody.innerHTML = rows;
-        cartTotalEl.textContent = total.toFixed(2);
-      }
 
-      function addToCart(productId, qty) {
-        if (qty <= 0) qty = 1;
-        var existing = cart.find(function(i){ return i.id === productId; });
-        if (existing) {
-          existing.qty += qty;
-        } else {
-          cart.push({ id: productId, qty: qty });
+        var itemsForOrder = cart.map(function(c){
+          return { id: c.id, qty: c.qty };
+        });
+
+        showMessage('Creating order...');
+        var orderResp;
+        try {
+          orderResp = await createOrderOnServer({ items: itemsForOrder });
+        } catch (e) {
+          console.error(e);
+          showMessage('Network/server error. Please try again.', 9000);
+          return;
         }
-        renderCart();
-        showMessage('Item added to cart.', 3000);
-      }
 
-      addButtons.forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var id = btn.getAttribute('data-id');
-          var qtyInput = document.querySelector('input.qty[data-id="' + id + '"]');
-          var qty = parseInt((qtyInput && qtyInput.value) || '1', 10);
-          if (isNaN(qty) || qty < 1) qty = 1;
-          addToCart(id, qty);
-        });
-      });
+        if (orderResp.error) {
+          showMessage('Server error: ' + (orderResp.error || 'Unknown error'), 9000);
+          return;
+        }
 
-      async function createOrderOnServer(payload) {
-        var res = await fetch('/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        return res.json();
-      }
+        console.log("Order response from server:", orderResp);
 
-      async function verifyPaymentOnServer(payload) {
-        var res = await fetch('/verify-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        return res.json();
-      }
-
-      if (checkoutBtn) {
-        checkoutBtn.addEventListener('click', async function(){
-          if (!cart.length) {
-            showMessage('Your cart is empty.', 4000);
-            return;
-          }
-
-          var itemsForOrder = cart.map(function(c){
-            return { id: c.id, qty: c.qty };
-          });
-
-          showMessage('Creating order...');
-          var orderResp;
-          try {
-            orderResp = await createOrderOnServer({ items: itemsForOrder });
-          } catch (e) {
-            console.error(e);
-            showMessage('Network/server error. Please try again.', 9000);
-            return;
-          }
-
-          if (orderResp.error) {
-            showMessage('Server error: ' + (orderResp.error || 'Unknown error'), 9000);
-            return;
-          }
-
-          var detailedItems = cart.map(function(c){
-            var p = products.find(function(pr){ return pr.id === c.id; });
-            if (!p) return null;
-            return {
-              id: p.id,
-              name: p.name,
-              unitPrice: p.price,
-              quantity: c.qty
-            };
-          }).filter(Boolean);
-
-              console.log("Order response from server:", orderResp);
-
-          var options = {
-            // Yahan direct server se Razorpay key embed kar rahe hain
-            key: "${RZP_KEY_ID}",
-
-            amount: orderResp.amount,
-            currency: orderResp.currency,
-            name: "${BRAND_NAME}",
-            description: "Order of " + cart.length + " item(s)",
-            order_id: orderResp.id,
-            handler: async function (response) {
-              showMessage("Verifying payment, please wait...");
-              try {
-                var verifyResp = await verifyPaymentOnServer({
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                  items: detailedItems
-                });
-                if (verifyResp && verifyResp.success) {
-                  cart = [];
-                  renderCart();
-                  var link = verifyResp.invoiceUrl
-                    ? '<a href="' + verifyResp.invoiceUrl + '" target="_blank">Download Invoice</a>'
-                    : "";
-                  showMessage("Payment successful! " + link, 15000);
-                } else {
-                  showMessage("Payment verification failed. Please contact support.", 12000);
-                }
-              } catch (err) {
-                console.error(err);
-                showMessage("Verification error. Please contact support.", 12000);
-              }
-            },
-            prefill: {
-              name: "",
-              email: "",
-              contact: ""
-            },
-            notes: {},
-            theme: { color: "#ff7a00" }
+        var detailedItems = cart.map(function(c){
+          var p = products.find(function(pr){ return pr.id === c.id; });
+          if (!p) return null;
+          return {
+            id: p.id,
+            name: p.name,
+            unitPrice: p.price,
+            quantity: c.qty
           };
+        }).filter(Boolean);
 
-    </script>`;
+        var options = {
+          key: "${RZP_KEY_ID}",
+          amount: orderResp.amount,
+          currency: orderResp.currency,
+          name: "${BRAND_NAME}",
+          description: "Order of " + cart.length + " item(s)",
+          order_id: orderResp.id,
+          handler: async function (response) {
+            showMessage('Verifying payment, please wait...');
+            try {
+              var verifyResp = await verifyPaymentOnServer({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                items: detailedItems
+              });
+              if (verifyResp && verifyResp.success) {
+                cart = [];
+                renderCart();
+                var link = verifyResp.invoiceUrl
+                  ? '<a href="' + verifyResp.invoiceUrl + '" target="_blank">Download Invoice</a>'
+                  : '';
+                showMessage('Payment successful! ' + link, 15000);
+              } else {
+                showMessage('Payment verification failed. Please contact support.', 12000);
+              }
+            } catch (err) {
+              console.error(err);
+              showMessage('Verification error. Please contact support.', 12000);
+            }
+          },
+          prefill: {
+            name: '',
+            email: '',
+            contact: ''
+          },
+          notes: {},
+          theme: { color: '#ff7a00' }
+        };
+
+        var rzpObj = new Razorpay(options);
+        rzpObj.open();
+      });
+    }
+  </script>`;
 
   res.send(
     renderPage({
@@ -789,16 +777,19 @@ app.get("/contact", (req, res) => {
   );
 });
 
-// ====== CREATE ORDER (RAZORPAY) USING CART ITEMS ======
+// ====== CREATE ORDER (RAZORPAY) ======
 app.post("/create-order", async (req, res) => {
   try {
+    if (!rzp) {
+      return res.status(500).json({ error: "Razorpay not configured" });
+    }
+
     const { items } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
     let totalAmount = 0;
-
     items.forEach((item) => {
       const product = PRODUCTS.find((p) => p.id === item.id);
       const qty = Number(item.qty || 1);
@@ -823,7 +814,6 @@ app.post("/create-order", async (req, res) => {
       id: order.id,
       amount: order.amount,
       currency: order.currency,
-      key: process.env.RZP_KEY_ID || "",
       receipt: order.receipt,
       status: order.status,
     });
@@ -833,7 +823,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-// ====== VERIFY PAYMENT + GENERATE CART INVOICE ======
+// ====== VERIFY PAYMENT + GENERATE INVOICE ======
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -848,7 +838,7 @@ app.post("/verify-payment", async (req, res) => {
     }
 
     const generatedSignature = crypto
-      .createHmac("sha256", process.env.RZP_KEY_SECRET || "")
+      .createHmac("sha256", RZP_KEY_SECRET || "")
       .update(razorpay_order_id + "|" + razorpay_payment_id)
       .digest("hex");
 
@@ -933,4 +923,3 @@ app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
   console.log("Ensure you set RZP_KEY_ID and RZP_KEY_SECRET in .env or Render env vars");
 });
-
