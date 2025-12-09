@@ -641,15 +641,19 @@ app.get("/", (req, res) => {
             };
           }).filter(Boolean);
 
+              console.log("Order response from server:", orderResp);
+
           var options = {
-            key: orderResp.key,
+            // Yahan direct server se Razorpay key embed kar rahe hain
+            key: "${RZP_KEY_ID}",
+
             amount: orderResp.amount,
             currency: orderResp.currency,
-            name: '${BRAND_NAME}',
-            description: 'Order of ' + cart.length + ' item(s)',
+            name: "${BRAND_NAME}",
+            description: "Order of " + cart.length + " item(s)",
             order_id: orderResp.id,
             handler: async function (response) {
-              showMessage('Verifying payment, please wait...');
+              showMessage("Verifying payment, please wait...");
               try {
                 var verifyResp = await verifyPaymentOnServer({
                   razorpay_order_id: response.razorpay_order_id,
@@ -660,29 +664,27 @@ app.get("/", (req, res) => {
                 if (verifyResp && verifyResp.success) {
                   cart = [];
                   renderCart();
-                  var link = verifyResp.invoiceUrl ? '<a href="' + verifyResp.invoiceUrl + '" target="_blank">Download Invoice</a>' : '';
-                  showMessage('Payment successful! ' + link, 15000);
+                  var link = verifyResp.invoiceUrl
+                    ? '<a href="' + verifyResp.invoiceUrl + '" target="_blank">Download Invoice</a>'
+                    : "";
+                  showMessage("Payment successful! " + link, 15000);
                 } else {
-                  showMessage('Payment verification failed. Please contact support.', 12000);
+                  showMessage("Payment verification failed. Please contact support.", 12000);
                 }
               } catch (err) {
                 console.error(err);
-                showMessage('Verification error. Please contact support.', 12000);
+                showMessage("Verification error. Please contact support.", 12000);
               }
             },
             prefill: {
-              name: '',
-              email: '',
-              contact: ''
+              name: "",
+              email: "",
+              contact: ""
             },
             notes: {},
-            theme: { color: '#ff7a00' }
+            theme: { color: "#ff7a00" }
           };
 
-          var rzpObj = new Razorpay(options);
-          rzpObj.open();
-        });
-      }
     </script>`;
 
   res.send(
