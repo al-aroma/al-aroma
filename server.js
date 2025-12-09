@@ -1,4 +1,4 @@
-// Load environment variables (.env for local, Render env vars on server)
+// Load environment variables from .env (local) or Render env vars
 require("dotenv").config();
 
 const express = require("express");
@@ -8,6 +8,7 @@ const fs = require("fs");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const PDFDocument = require("pdfkit");
+const QRCode = require("qrcode"); // For QR code in invoice
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,10 +16,13 @@ const PORT = process.env.PORT || 3000;
 // ====== BASIC CONFIG ======
 const BRAND_NAME = "Al Aroma Spices";
 const BRAND_TAGLINE = "We deliver fresh, high-quality spices for your kitchen.";
-const PHONE_DISPLAY = "+91-9876543210"; // apna number daal sakte ho
-const PHONE_WHATSAPP = "919876543210";  // WhatsApp link (country code + number, bina +)
-const EMAIL_ID = "alaroma.spices@gmail.com";
-const ADDRESS_LINE = "Pune, Maharashtra, India";
+
+const PHONE_DISPLAY = "+91-6392914193";
+const PHONE_WHATSAPP = "916392914193"; // WhatsApp (country code + number, NO +)
+const EMAIL_ID = "aarinexa5@gmail.com";
+const ADDRESS_LINE = "Lucknow, Vastukhand, India - 226010";
+
+const SITE_URL = process.env.SITE_URL || "https://al-aroma.onrender.com";
 const CURRENT_YEAR = new Date().getFullYear();
 
 // ====== INVOICE FOLDER ======
@@ -36,14 +40,13 @@ app.use("/invoices", express.static(INVOICES_DIR)); // serve invoice PDFs
 const RZP_KEY_ID = (process.env.RZP_KEY_ID || "").trim();
 const RZP_KEY_SECRET = (process.env.RZP_KEY_SECRET || "").trim();
 
-// helpful logs
 console.log("RZP_KEY_ID from env:", JSON.stringify(RZP_KEY_ID));
 console.log("RZP_KEY_SECRET present?:", !!RZP_KEY_SECRET);
 
 let rzp = null;
 if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
   console.error(
-    "❌ Razorpay env vars missing! Please set RZP_KEY_ID and RZP_KEY_SECRET in .env (local) or Render Environment."
+    "❌ Razorpay env vars missing! Please set RZP_KEY_ID and RZP_KEY_SECRET in .env or Render Environment."
   );
 } else {
   rzp = new Razorpay({
@@ -78,7 +81,7 @@ const PRODUCTS = [
   },
 ];
 
-// ====== COMMON LAYOUT FUNCTION ======
+// ====== COMMON LAYOUT ======
 function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = "" }) {
   return `<!doctype html>
 <html lang="en">
@@ -91,279 +94,66 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin:0; padding:0; background:#f4f5fb; color:#222; }
     a { text-decoration:none; color:inherit; }
 
-    header {
-      background:#0f4c81;
-      color:#fff;
-      padding:10px 16px;
-      position:sticky;
-      top:0;
-      z-index:10;
+    header { background:#0f4c81; color:#fff; padding:10px 16px; position:sticky; top:0; z-index:10; }
+    .topbar { max-width:1100px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .logo { font-weight:800; font-size:22px; letter-spacing:0.03em; display:flex; align-items:center; gap:6px; }
+    .logo-badge {
+      width:22px; height:22px; border-radius:50%; background:#ff7a00;
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:12px; font-weight:800;
     }
-    .topbar {
-      max-width:1100px;
-      margin:0 auto;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:12px;
-      flex-wrap:wrap;
-    }
-    .logo {
-      font-weight:800;
-      font-size:22px;
-      letter-spacing:0.03em;
-    }
-    .contact-top {
-      font-size:12px;
-      opacity:0.9;
-      text-align:right;
-    }
-    nav {
-      margin-top:6px;
-      font-size:14px;
-    }
-    .nav-link {
-      margin-right:16px;
-      opacity:0.9;
-    }
-    .nav-link.active {
-      font-weight:600;
-      opacity:1;
-      border-bottom:2px solid #ffd36b;
-      padding-bottom:2px;
-    }
+    .contact-top { font-size:12px; opacity:0.9; text-align:right; }
+    nav { margin-top:6px; font-size:14px; }
+    .nav-link { margin-right:16px; opacity:0.9; }
+    .nav-link.active { font-weight:600; opacity:1; border-bottom:2px solid #ffd36b; padding-bottom:2px; }
 
-    .container {
-      max-width:1100px;
-      margin:22px auto;
-      padding:0 14px;
-    }
+    .container { max-width:1100px; margin:22px auto; padding:0 14px; }
 
-    .hero {
-      background:#0f4c81;
-      color:#fff;
-      padding:24px 16px 30px;
-    }
-    .hero-inner {
-      max-width:1100px;
-      margin:0 auto;
-      display:grid;
-      grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
-      gap:24px;
-      align-items:center;
-    }
-    .hero h1 {
-      margin:0 0 8px;
-      font-size:32px;
-    }
-    .hero p {
-      margin:0 0 14px;
-      font-size:15px;
-    }
-    .hero-highlights {
-      display:flex;
-      flex-wrap:wrap;
-      gap:10px;
-      margin-top:8px;
-    }
-    .pill {
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,0.4);
-      padding:4px 10px;
-      font-size:12px;
-    }
-    .hero-box {
-      background:rgba(255,255,255,0.12);
-      border-radius:16px;
-      padding:14px;
-      font-size:13px;
-      box-shadow:0 8px 24px rgba(0,0,0,0.18);
-    }
+    .hero { background:#0f4c81; color:#fff; padding:24px 16px 30px; }
+    .hero-inner { max-width:1100px; margin:0 auto; display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:24px; align-items:center; }
+    .hero h1 { margin:0 0 8px; font-size:32px; }
+    .hero p { margin:0 0 14px; font-size:15px; }
+    .hero-highlights { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+    .pill { border-radius:999px; border:1px solid rgba(255,255,255,0.4); padding:4px 10px; font-size:12px; }
+    .hero-box { background:rgba(255,255,255,0.12); border-radius:16px; padding:14px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,0.18); }
 
-    h2.section-title {
-      font-size:20px;
-      margin:0 0 4px;
-    }
-    .section-sub {
-      font-size:13px;
-      color:#555;
-      margin-bottom:16px;
-    }
+    h2.section-title { font-size:20px; margin:0 0 4px; }
+    .section-sub { font-size:13px; color:#555; margin-bottom:16px; }
 
-    .grid-products {
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap:18px;
-    }
-    .card {
-      background:#fff;
-      border-radius:16px;
-      padding:14px;
-      box-shadow:0 10px 26px rgba(15,18,40,0.08);
-      text-align:center;
-    }
-    .card img {
-      width:100%;
-      height:170px;
-      border-radius:12px;
-      object-fit:cover;
-      background:#eee;
-    }
-    .card h3 {
-      margin:10px 0 4px;
-      font-size:17px;
-    }
-    .card .desc {
-      font-size:13px;
-      color:#555;
-      min-height:34px;
-    }
-    .price {
-      font-weight:700;
-      margin-top:8px;
-      font-size:16px;
-    }
-    .controls {
-      margin-top:10px;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      gap:8px;
-    }
-    .qty {
-      width:70px;
-      padding:6px;
-      border-radius:8px;
-      border:1px solid #d0d0d0;
-      text-align:center;
-      font-size:13px;
-    }
-    button.primary-btn {
-      background:#ff7a00;
-      color:#fff;
-      border:0;
-      border-radius:999px;
-      padding:8px 16px;
-      font-size:14px;
-      cursor:pointer;
-      font-weight:600;
-      box-shadow:0 8px 20px rgba(255,122,0,0.45);
-    }
-    button.primary-btn:hover {
-      filter:brightness(0.95);
-    }
+    .grid-products { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
+    .card { background:#fff; border-radius:16px; padding:14px; box-shadow:0 10px 26px rgba(15,18,40,0.08); text-align:center; }
+    .card img { width:100%; height:170px; border-radius:12px; object-fit:cover; background:#eee; }
+    .card h3 { margin:10px 0 4px; font-size:17px; }
+    .card .desc { font-size:13px; color:#555; min-height:34px; }
+    .price { font-weight:700; margin-top:8px; font-size:16px; }
+    .controls { margin-top:10px; display:flex; justify-content:center; align-items:center; gap:8px; }
+    .qty { width:70px; padding:6px; border-radius:8px; border:1px solid #d0d0d0; text-align:center; font-size:13px; }
+    button.primary-btn { background:#ff7a00; color:#fff; border:0; border-radius:999px; padding:8px 16px; font-size:14px; cursor:pointer; font-weight:600; box-shadow:0 8px 20px rgba(255,122,0,0.45); }
+    button.primary-btn:hover { filter:brightness(0.95); }
 
-    .two-col {
-      display:grid;
-      grid-template-columns: minmax(0,1.2fr) minmax(0,1fr);
-      gap:20px;
-      align-items:flex-start;
-      margin-top:10px;
-    }
-    .card-soft {
-      background:#fff;
-      border-radius:16px;
-      padding:14px 16px;
-      box-shadow:0 10px 25px rgba(0,0,0,0.04);
-      font-size:13px;
-    }
-    .card-soft h3 {
-      margin-top:0;
-      margin-bottom:6px;
-      font-size:16px;
-    }
-    .card-soft ul {
-      padding-left:18px;
-      margin:4px 0 8px;
-    }
-    .card-soft li {
-      margin-bottom:4px;
-    }
+    .two-col { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:20px; align-items:flex-start; margin-top:10px; }
+    .card-soft { background:#fff; border-radius:16px; padding:14px 16px; box-shadow:0 10px 25px rgba(0,0,0,0.04); font-size:13px; }
+    .card-soft h3 { margin-top:0; margin-bottom:6px; font-size:16px; }
 
-    .cart-table {
-      width:100%;
-      border-collapse:collapse;
-      font-size:12px;
-    }
-    .cart-table th,
-    .cart-table td {
-      border-bottom:1px solid #eee;
-      padding:6px 4px;
-      text-align:left;
-    }
-    .cart-total-row {
-      font-weight:bold;
-    }
-    .cart-empty {
-      font-size:12px;
-      color:#777;
-    }
+    .cart-table { width:100%; border-collapse:collapse; font-size:12px; border:1px solid #ddd; border-radius:8px; overflow:hidden; }
+    .cart-table th, .cart-table td { border-bottom:1px solid #eee; padding:8px 6px; text-align:left; }
+    .cart-table thead th { background:#f3f4f8; font-weight:600; }
+    .cart-total-row td { background:#faf5ff; font-weight:bold; }
+    .cart-empty { font-size:12px; color:#777; }
 
-    footer {
-      margin-top:24px;
-      background:#0f4c81;
-      color:#fff;
-      padding:18px 14px;
-    }
-    .footer-inner {
-      max-width:1100px;
-      margin:0 auto;
-      font-size:13px;
-      display:flex;
-      flex-wrap:wrap;
-      gap:10px;
-      justify-content:space-between;
-      align-items:center;
-    }
-    .footer-contact {
-      line-height:1.5;
-    }
+    footer { margin-top:24px; background:#0f4c81; color:#fff; padding:18px 14px; }
+    .footer-inner { max-width:1100px; margin:0 auto; font-size:13px; display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; }
+    .footer-contact { line-height:1.5; }
 
-    .wa-btn {
-      position:fixed;
-      right:18px;
-      bottom:18px;
-      background:#25D366;
-      color:#fff;
-      padding:9px 14px;
-      border-radius:999px;
-      font-size:14px;
-      font-weight:600;
-      display:flex;
-      align-items:center;
-      gap:6px;
-      box-shadow:0 10px 26px rgba(0,0,0,0.3);
-    }
+    .wa-btn { position:fixed; right:18px; bottom:18px; background:#25D366; color:#fff; padding:9px 14px; border-radius:999px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px; box-shadow:0 10px 26px rgba(0,0,0,0.3); }
 
-    form.contact-form {
-      display:grid;
-      gap:10px;
-      margin-top:10px;
-    }
-    .contact-form input,
-    .contact-form textarea {
-      padding:8px;
-      border-radius:8px;
-      border:1px solid #ccc;
-      font-size:13px;
-    }
-    .contact-form button {
-      background:#0f4c81;
-      color:#fff;
-      border:0;
-      border-radius:999px;
-      padding:8px 16px;
-      font-size:14px;
-      cursor:pointer;
-    }
+    form.contact-form { display:grid; gap:10px; margin-top:10px; }
+    .contact-form input, .contact-form textarea { padding:8px; border-radius:8px; border:1px solid #ccc; font-size:13px; }
+    .contact-form button { background:#0f4c81; color:#fff; border:0; border-radius:999px; padding:8px 16px; font-size:14px; cursor:pointer; }
 
-    @media (max-width: 800px) {
-      .hero-inner {
-        grid-template-columns: minmax(0,1fr);
-      }
-      .two-col {
-        grid-template-columns: minmax(0,1fr);
-      }
+    @media (max-width:800px) {
+      .hero-inner { grid-template-columns:minmax(0,1fr); }
+      .two-col { grid-template-columns:minmax(0,1fr); }
       header { position:static; }
       .hero { padding-top:16px; }
     }
@@ -374,7 +164,10 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
   <header>
     <div class="topbar">
       <div>
-        <div class="logo">${BRAND_NAME}</div>
+        <div class="logo">
+          <div class="logo-badge">A</div>
+          <div>Al Aroma Spices</div>
+        </div>
         <nav>
           <a href="/" class="nav-link ${active === "home" ? "active" : ""}">Home</a>
           <a href="/about" class="nav-link ${active === "about" ? "active" : ""}">About</a>
@@ -408,7 +201,7 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
 </html>`;
 }
 
-// ====== HOME PAGE (PRODUCTS + CART + PAYMENT) ======
+// ====== HOME (Products + Cart + Payment) ======
 app.get("/", (req, res) => {
   const productCards = PRODUCTS.map(
     (p) => `
@@ -441,8 +234,8 @@ app.get("/", (req, res) => {
           <strong>How to order:</strong>
           <ul>
             <li>Products se quantity select karke <b>Add to cart</b> pe click karein.</li>
-            <li>Cart me sab items check karke <b>Pay & Checkout</b> click karein.</li>
-            <li>Payment Razorpay ke through hoga (UPI / Card / NetBanking).</li>
+            <li>Cart me items check karke <b>Pay & Checkout</b> click karein.</li>
+            <li>Payment Razorpay (UPI / Card / NetBanking) se hoga.</li>
             <li>Payment ke baad automatic <b>PDF invoice</b> generate hoga.</li>
           </ul>
           <div style="font-size:11px; opacity:0.85; margin-top:6px;">
@@ -492,7 +285,7 @@ app.get("/", (req, res) => {
             <h3>Delivery & Contact</h3>
             <ul>
               <li>Dispatch within 1–3 working days for ready stock.</li>
-              <li>Pan-India courier service (charges as per location).</li>
+              <li>Pan-India courier (charges as per location).</li>
               <li>Secure online payment via Razorpay.</li>
             </ul>
             <p>
@@ -508,7 +301,8 @@ app.get("/", (req, res) => {
 
   const extraHead = `<script src="https://checkout.razorpay.com/v1/checkout.js"></script>`;
 
-  const extraScripts = `<script>
+  const extraScripts = `
+  <script>
     const products = ${JSON.stringify(PRODUCTS)};
     let cart = [];
 
@@ -630,7 +424,7 @@ app.get("/", (req, res) => {
         }).filter(Boolean);
 
         var options = {
-          key: "${RZP_KEY_ID}",
+          key: orderResp.key, // Razorpay key from server
           amount: orderResp.amount,
           currency: orderResp.currency,
           name: "${BRAND_NAME}",
@@ -686,7 +480,7 @@ app.get("/", (req, res) => {
   );
 });
 
-// ====== ABOUT PAGE ======
+// ====== ABOUT ======
 app.get("/about", (req, res) => {
   const body = `
     <main class="container">
@@ -699,22 +493,23 @@ app.get("/about", (req, res) => {
           <p>
             ${BRAND_NAME} ek chhota se initiative ke roop mein shuru hua jahan humne
             apne ghar ke liye saaf aur flavourful masale source karne shuru kiye.
+          </p>
+          <p>
             Dheere-dheere local customers ko hamara taste pasand aaya, aur aaj hum
             retail aur bulk dono customers tak fresh masale pahucha rahe hain.
           </p>
           <p>
-            Hamara mission simple hai: <b>“Har ghar tak asli swaad aur khushboo
-            pohchana, bina quality compromise ke.”</b>
+            Hamara mission hai: <b>"Har ghar tak asli swaad aur khushboo pohchana, bina quality compromise ke."</b>
           </p>
         </div>
 
         <div class="card-soft">
           <h3>What makes us different?</h3>
           <ul>
-            <li>Selected farms & trusted suppliers se raw material sourcing.</li>
+            <li>Selected farms & trusted suppliers se raw material.</li>
             <li>Small-batch grinding taaki aroma aur oils retain rahein.</li>
-            <li>Food-grade pouches aur cartons mein hygienic packing.</li>
-            <li>Flexible packing sizes for homes, restaurants & bulk buyers.</li>
+            <li>Food-grade pouches mein hygienic packing.</li>
+            <li>Flexible packing sizes for homes, hotels & bulk buyers.</li>
           </ul>
         </div>
       </div>
@@ -730,7 +525,7 @@ app.get("/about", (req, res) => {
   );
 });
 
-// ====== CONTACT PAGE ======
+// ====== CONTACT ======
 app.get("/contact", (req, res) => {
   const body = `
     <main class="container">
@@ -746,7 +541,7 @@ app.get("/contact", (req, res) => {
             Location: <b>${ADDRESS_LINE}</b>
           </p>
           <p>
-            WhatsApp direct link: <br/>
+            WhatsApp direct link:<br/>
             <a href="https://wa.me/${PHONE_WHATSAPP}" target="_blank">https://wa.me/${PHONE_WHATSAPP}</a>
           </p>
         </div>
@@ -777,7 +572,7 @@ app.get("/contact", (req, res) => {
   );
 });
 
-// ====== CREATE ORDER (RAZORPAY) ======
+// ====== CREATE ORDER (Razorpay) ======
 app.post("/create-order", async (req, res) => {
   try {
     if (!rzp) {
@@ -816,6 +611,7 @@ app.post("/create-order", async (req, res) => {
       currency: order.currency,
       receipt: order.receipt,
       status: order.status,
+      key: RZP_KEY_ID, // frontend uses this for Razorpay checkout
     });
   } catch (err) {
     console.error("Create order error:", err);
@@ -823,7 +619,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-// ====== VERIFY PAYMENT + GENERATE INVOICE ======
+// ====== VERIFY PAYMENT + GENERATE INVOICE (with QR) ======
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -837,6 +633,7 @@ app.post("/verify-payment", async (req, res) => {
       return res.status(400).json({ error: "Missing verification fields" });
     }
 
+    // Verify signature
     const generatedSignature = crypto
       .createHmac("sha256", RZP_KEY_SECRET || "")
       .update(razorpay_order_id + "|" + razorpay_payment_id)
@@ -852,31 +649,61 @@ app.post("/verify-payment", async (req, res) => {
     const invoiceId = `inv_${Date.now()}`;
     const invoiceFilename = `invoice_${razorpay_order_id}.pdf`;
     const invoicePath = path.join(INVOICES_DIR, invoiceFilename);
+    const invoiceUrlPath = "/invoices/" + invoiceFilename;
+    const qrData = SITE_URL + invoiceUrlPath;
+
+    // QR code generate
+    let qrBuffer = null;
+    try {
+      qrBuffer = await QRCode.toBuffer(qrData, { width: 120 });
+    } catch (qrErr) {
+      console.error("QR code generation error:", qrErr);
+    }
 
     const doc = new PDFDocument({ margin: 50 });
     const writeStream = fs.createWriteStream(invoicePath);
     doc.pipe(writeStream);
 
-    // Header
-    doc.fontSize(20).text(BRAND_NAME, { align: "left" });
-    doc.fontSize(10).text("Invoice ID: " + invoiceId, { align: "right" });
-    doc.text("Order ID: " + razorpay_order_id, { align: "right" });
+    // Header / Logo style
+    doc.fontSize(20).text(BRAND_NAME, 50, 50);
+    doc.fontSize(10).text(BRAND_TAGLINE, 50, 72);
+
+    // QR top-right
+    if (qrBuffer) {
+      doc.image(qrBuffer, 400, 40, { width: 100 });
+    }
+
+    doc.moveDown();
+    doc.fontSize(10)
+      .text("Invoice ID: " + invoiceId)
+      .text("Order ID: " + razorpay_order_id)
+      .text("Payment ID: " + razorpay_payment_id);
     doc.moveDown();
 
-    // Seller info
-    doc.fontSize(10).text("Seller: " + BRAND_NAME);
-    doc.text("Address: " + ADDRESS_LINE);
-    doc.moveDown();
+    // Seller details
+    doc.fontSize(12).text("Seller Details:", 50, doc.y);
+    doc.fontSize(10)
+      .text(BRAND_NAME)
+      .text("Phone: " + PHONE_DISPLAY)
+      .text("Email: " + EMAIL_ID)
+      .text("Address: " + ADDRESS_LINE);
+    doc.moveDown(1.5);
 
     // Table header
-    doc.moveDown(0.5);
-    doc.fontSize(12).text("Item", 50, doc.y);
-    doc.text("Qty", 300, doc.y);
-    doc.text("Unit (₹)", 350, doc.y);
-    doc.text("Total (₹)", 450, doc.y);
-    doc.moveDown();
+    const tableTopY = doc.y;
+    doc.fontSize(12);
+    doc.text("Item", 50, tableTopY);
+    doc.text("Qty", 260, tableTopY);
+    doc.text("Unit (₹)", 320, tableTopY);
+    doc.text("Total (₹)", 400, tableTopY);
 
+    doc.moveTo(50, tableTopY + 15)
+      .lineTo(500, tableTopY + 15)
+      .stroke();
+
+    // Rows
     let grandTotal = 0;
+    let currentY = tableTopY + 20;
 
     safeItems.forEach((item) => {
       const qty = Number(item.quantity || 1);
@@ -884,28 +711,40 @@ app.post("/verify-payment", async (req, res) => {
       const lineTotal = qty * unit;
       grandTotal += lineTotal;
 
-      doc.fontSize(11).text(item.name || "Product", 50);
-      doc.text(qty.toString(), 300);
-      doc.text(unit.toFixed(2), 350);
-      doc.text(lineTotal.toFixed(2), 450);
-      doc.moveDown();
+      doc.fontSize(11);
+      doc.text(item.name || "Product", 50, currentY);
+      doc.text(qty.toString(), 260, currentY);
+      doc.text(unit.toFixed(2), 320, currentY);
+      doc.text(lineTotal.toFixed(2), 400, currentY);
+
+      currentY += 18;
+      doc.moveTo(50, currentY)
+        .lineTo(500, currentY)
+        .stroke();
     });
 
-    doc.moveDown();
-    doc.text("Subtotal: ₹" + grandTotal.toFixed(2), { align: "right" });
+    // Totals
+    doc.moveDown(2);
+    doc.fontSize(12).text("Subtotal: ₹" + grandTotal.toFixed(2), { align: "right" });
     doc.text("GST: ₹0.00", { align: "right" });
     doc.text("Grand Total: ₹" + grandTotal.toFixed(2), { align: "right" });
 
+    // QR info
     doc.moveDown(2);
-    doc.fontSize(10).text("Payment ID: " + razorpay_payment_id);
-    doc.text("Thank you for your purchase!", { align: "center" });
+    if (qrBuffer) {
+      doc.fontSize(9)
+        .text("Scan the QR to view this invoice online:", 50, currentY + 20)
+        .text(qrData, 50, currentY + 34);
+    }
+
+    doc.moveDown(3);
+    doc.fontSize(10).text("Thank you for your purchase!", { align: "center" });
 
     doc.end();
 
     writeStream.on("finish", () => {
-      const invoiceUrl = "/invoices/" + invoiceFilename;
       console.log("Invoice generated:", invoicePath);
-      res.json({ success: true, invoiceUrl });
+      res.json({ success: true, invoiceUrl: invoiceUrlPath });
     });
 
     writeStream.on("error", (err) => {
