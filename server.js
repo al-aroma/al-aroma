@@ -23,6 +23,9 @@ const EMAIL_ID = "aarinexa5@gmail.com";
 const ADDRESS_LINE = "Vastukhand, Lucknow, Uttar Pradesh 226010, India";
 const CURRENT_YEAR = new Date().getFullYear();
 
+// ====== SIMPLE ADMIN CONFIG ======
+const ADMIN_KEY = (process.env.ADMIN_KEY || "aladmin6392").trim(); // /admin?key=aladmin6392
+
 // ====== PATHS & FOLDERS ======
 const ROOT_DIR = __dirname;
 const INVOICES_DIR = path.join(ROOT_DIR, "invoices");
@@ -40,7 +43,7 @@ if (!fs.existsSync(PUBLIC_DIR)) {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Static files (logo, product images, etc.)
+// Static files
 app.use(express.static(PUBLIC_DIR));
 // Serve invoice PDFs
 app.use("/invoices", express.static(INVOICES_DIR));
@@ -116,12 +119,13 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
     a { text-decoration:none; color:inherit; }
 
     header {
-      background:#0f4c81;
+      background:linear-gradient(90deg,#0b3058,#0f4c81);
       color:#fff;
       padding:8px 16px 12px;
       position:sticky;
       top:0;
       z-index:50;
+      box-shadow:0 4px 16px rgba(0,0,0,0.25);
     }
     .topbar {
       max-width:1100px;
@@ -182,9 +186,9 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
     }
 
     .hero {
-      background:#0f4c81;
+      background:radial-gradient(circle at top left,#ffbf66,#ff7a00 40%,#0f4c81 100%);
       color:#fff;
-      padding:22px 14px 26px;
+      padding:26px 14px 30px;
     }
     .hero-inner {
       max-width:1100px;
@@ -212,12 +216,35 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
       font-size:11px;
     }
     .hero-box {
-      background:rgba(255,255,255,0.1);
-      border-radius:14px;
+      background:rgba(15,22,40,0.55);
+      border-radius:18px;
       padding:14px;
       font-size:12px;
-      box-shadow:0 10px 26px rgba(0,0,0,0.25);
+      box-shadow:0 18px 40px rgba(0,0,0,0.4);
+      backdrop-filter:blur(6px);
     }
+
+    .stats-strip {
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      justify-content:space-between;
+      padding:12px 14px;
+      background:#fff;
+      max-width:1100px;
+      margin:-18px auto 10px;
+      border-radius:999px;
+      box-shadow:0 8px 28px rgba(0,0,0,0.12);
+      font-size:11px;
+    }
+    .stat-item {
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      min-width:120px;
+    }
+    .stat-label { color:#666; }
+    .stat-value { font-weight:700; font-size:14px; }
 
     h2.section-title {
       font-size:20px;
@@ -305,6 +332,17 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
     }
     .card-soft li { margin-bottom:4px; }
 
+    .why-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:16px;
+      margin-top:10px;
+    }
+    .why-card-icon {
+      font-size:22px;
+      margin-bottom:4px;
+    }
+
     .cart-table {
       width:100%;
       border-collapse:collapse;
@@ -390,11 +428,32 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
       box-shadow:0 10px 26px rgba(0,0,0,0.3);
     }
 
+    /* Admin table */
+    .admin-table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+    }
+    .admin-table th,
+    .admin-table td {
+      border:1px solid #e0e0e0;
+      padding:6px 8px;
+      text-align:left;
+    }
+    .admin-table th {
+      background:#f0f3ff;
+      font-weight:600;
+    }
+
     @media (max-width: 800px) {
       .hero-inner,
       .two-col { grid-template-columns:minmax(0,1fr); }
       header { position:static; }
       .hero { padding-top:16px; }
+      .stats-strip {
+        border-radius:16px;
+        margin-top:8px;
+      }
     }
   </style>
   ${extraHead}
@@ -441,7 +500,7 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
 </html>`;
 }
 
-// ====== HOME PAGE (PRODUCTS + CART + CUSTOMER DETAILS) ======
+// ====== HOME PAGE ======
 app.get("/", (req, res) => {
   const productCards = PRODUCTS.map(
     (p) =>
@@ -483,6 +542,25 @@ app.get("/", (req, res) => {
             *Delivery charges extra, as per location.
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="stats-strip">
+      <div class="stat-item">
+        <span class="stat-label">Experience</span>
+        <span class="stat-value">5+ Years</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Products</span>
+        <span class="stat-value">Spices & Dry Fruits</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Delivery</span>
+        <span class="stat-value">All over India*</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Support</span>
+        <span class="stat-value">WhatsApp & Call</span>
       </div>
     </section>
 
@@ -547,6 +625,43 @@ app.get("/", (req, res) => {
               Phone / WhatsApp: <b>${PHONE_DISPLAY}</b><br/>
               Email: <b>${EMAIL_ID}</b><br/>
               Location: <b>${ADDRESS_LINE}</b>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:26px;">
+        <h2 class="section-title">Why choose Al Aroma?</h2>
+        <div class="section-sub">
+          Quality, hygiene aur service — teeno par hum compromise nahi karte.
+        </div>
+        <div class="why-grid">
+          <div class="card-soft">
+            <div class="why-card-icon">🌶️</div>
+            <h3>Selected Ingredients</h3>
+            <p>
+              Sirf trusted suppliers se raw material, taaki har batch me ek hi taste aur quality mile.
+            </p>
+          </div>
+          <div class="card-soft">
+            <div class="why-card-icon">🧴</div>
+            <h3>Hygienic Packing</h3>
+            <p>
+              Food-grade pouches, proper sealing aur labelled packs — gifting ke liye bhi perfect.
+            </p>
+          </div>
+          <div class="card-soft">
+            <div class="why-card-icon">🚚</div>
+            <h3>Pan-India Delivery</h3>
+            <p>
+              Courier partners ke through secure delivery, tracking ke sath. Charges as per location.
+            </p>
+          </div>
+          <div class="card-soft">
+            <div class="why-card-icon">📄</div>
+            <h3>Proper Invoice</h3>
+            <p>
+              Har online order ke liye automatic PDF invoice, taaki record hamesha clear rahe.
             </p>
           </div>
         </div>
@@ -888,7 +1003,101 @@ app.get("/contact", (req, res) => {
   );
 });
 
-// ====== CREATE ORDER (SERVER SIDE) ======
+// ====== SIMPLE ADMIN PAGE (list invoices) ======
+app.get("/admin", (req, res) => {
+  const key = (req.query.key || "").trim();
+  if (key !== ADMIN_KEY) {
+    return res
+      .status(401)
+      .send(
+        "<h2>Unauthorized</h2><p>Admin key required. Open: /admin?key=YOUR_ADMIN_KEY</p>"
+      );
+  }
+
+  let files = [];
+  try {
+    files = fs.readdirSync(INVOICES_DIR).filter((f) => f.endsWith(".pdf"));
+  } catch (e) {
+    console.error("Error reading invoices dir:", e);
+  }
+
+  files.sort((a, b) => {
+    const aTime = fs.statSync(path.join(INVOICES_DIR, a)).mtimeMs;
+    const bTime = fs.statSync(path.join(INVOICES_DIR, b)).mtimeMs;
+    return bTime - aTime;
+  });
+
+  let rows = "";
+  let totalCount = files.length;
+
+  files.forEach((file, index) => {
+    const fullPath = path.join(INVOICES_DIR, file);
+    const stat = fs.statSync(fullPath);
+    const sizeKB = (stat.size / 1024).toFixed(1);
+    const dateStr = stat.mtime.toLocaleString();
+    const url = "/invoices/" + file;
+
+    rows += `
+      <tr>
+        <td>${index + 1}</td>
+        <td><a href="${url}" target="_blank">${file}</a></td>
+        <td>${sizeKB} KB</td>
+        <td>${dateStr}</td>
+      </tr>
+    `;
+  });
+
+  const bodyHtml = `
+    <main class="container">
+      <h2 class="section-title">Admin — Invoices</h2>
+      <div class="section-sub">
+        Simple admin view. Only you should know this URL and admin key.
+      </div>
+
+      <div class="card-soft">
+        <p><b>Total invoices:</b> ${totalCount}</p>
+        ${
+          totalCount === 0
+            ? "<p style='font-size:12px;color:#777;'>No invoices found yet. Once customers complete orders, PDF invoices will appear here.</p>"
+            : ""
+        }
+        ${
+          totalCount > 0
+            ? `
+        <div style="overflow-x:auto;margin-top:8px;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>File</th>
+                <th>Size</th>
+                <th>Last Modified</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>`
+            : ""
+        }
+      </div>
+      <p style="margin-top:12px;font-size:11px;color:#777;">
+        Tip: Change ADMIN_KEY in server.js or set ADMIN_KEY env var on Render for better security.
+      </p>
+    </main>
+  `;
+
+  res.send(
+    renderPage({
+      title: `Admin — Invoices`,
+      active: "",
+      bodyHtml,
+    })
+  );
+});
+
+// ====== CREATE ORDER ======
 app.post("/create-order", async (req, res) => {
   try {
     if (!rzp) {
@@ -937,7 +1146,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-// ====== VERIFY PAYMENT + GENERATE INVOICE (WITH BILL TO + QR) ======
+// ====== VERIFY PAYMENT + GENERATE INVOICE ======
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -988,13 +1197,19 @@ app.post("/verify-payment", async (req, res) => {
       .text("Phone: " + PHONE_DISPLAY, 130, currentY + 48)
       .text("Email: " + EMAIL_ID, 130, currentY + 60);
 
-    // QR code with basic order info
+    const totalAmountForQR = safeItems.reduce(function (sum, it) {
+      return (
+        sum +
+        Number(it.unitPrice || 0) * Number(it.quantity || 1)
+      );
+    }, 0);
+
     const qrText =
       "Invoice: " + invoiceId +
-      "\\nOrder: " + razorpay_order_id +
-      "\\nPayment: " + razorpay_payment_id +
-      "\\nAmount: " + (safeItems.reduce(function(sum, it){ return sum + (Number(it.unitPrice || 0) * Number(it.quantity || 1)); }, 0)).toFixed(2) +
-      "\\nCustomer: " + (safeCustomer.name || "");
+      "\nOrder: " + razorpay_order_id +
+      "\nPayment: " + razorpay_payment_id +
+      "\nAmount: " + totalAmountForQR.toFixed(2) +
+      "\nCustomer: " + (safeCustomer.name || "");
     const qrDataUrl = await QRCode.toDataURL(qrText);
     const qrBase64 = qrDataUrl.split(",")[1];
     const qrBuffer = Buffer.from(qrBase64, "base64");
@@ -1049,7 +1264,7 @@ app.post("/verify-payment", async (req, res) => {
     let rowY = tableTop + 22;
     let grandTotal = 0;
 
-    safeItems.forEach(function(item) {
+    safeItems.forEach(function (item) {
       const qty = Number(item.quantity || 1);
       const unit = Number(item.unitPrice || 0);
       const lineTotal = qty * unit;
