@@ -1,4 +1,4 @@
-// Load env variables
+// Load environment variables from .env
 require("dotenv").config();
 
 const express = require("express");
@@ -13,20 +13,21 @@ const QRCode = require("qrcode");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ====== BASIC CONFIG ======
+// ====== BASIC BRAND CONFIG ======
 const BRAND_NAME = "Al Aroma Spices";
 const BRAND_TAGLINE =
   "We deliver fresh, high-quality spices and dry fruits for your kitchen.";
 const PHONE_DISPLAY = "+91-6392914193";
-const PHONE_WHATSAPP = "916392914193"; // country code + number, no +
+const PHONE_WHATSAPP = "916392914193"; // 91 + 10 digits
 const EMAIL_ID = "aarinexa5@gmail.com";
 const ADDRESS_LINE = "Vastukhand, Lucknow, Uttar Pradesh 226010, India";
 const CURRENT_YEAR = new Date().getFullYear();
 
-// ====== FOLDERS ======
+// ====== PATHS & FOLDERS ======
 const ROOT_DIR = __dirname;
 const INVOICES_DIR = path.join(ROOT_DIR, "invoices");
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
+const LOGO_PATH = path.join(PUBLIC_DIR, "logo.png");
 
 if (!fs.existsSync(INVOICES_DIR)) {
   fs.mkdirSync(INVOICES_DIR, { recursive: true });
@@ -39,12 +40,12 @@ if (!fs.existsSync(PUBLIC_DIR)) {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// static files (logo, product images, css, etc.)
+// Static files (logo, product images, etc.)
 app.use(express.static(PUBLIC_DIR));
-// invoices download
+// Serve invoice PDFs
 app.use("/invoices", express.static(INVOICES_DIR));
 
-// ====== RAZORPAY SAFE INIT ======
+// ====== RAZORPAY INIT (SAFE) ======
 const RZP_KEY_ID = (process.env.RZP_KEY_ID || "").trim();
 const RZP_KEY_SECRET = (process.env.RZP_KEY_SECRET || "").trim();
 
@@ -52,10 +53,9 @@ console.log("RZP_KEY_ID from env:", JSON.stringify(RZP_KEY_ID));
 console.log("RZP_KEY_SECRET present?:", !!RZP_KEY_SECRET);
 
 let rzp = null;
-
 if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
   console.error(
-    "❌ Razorpay env vars missing! Set RZP_KEY_ID & RZP_KEY_SECRET in .env / Render env."
+    "❌ Razorpay env vars missing! Please set RZP_KEY_ID & RZP_KEY_SECRET in .env or Render env."
   );
 } else {
   rzp = new Razorpay({
@@ -65,39 +65,39 @@ if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
   console.log("✅ Razorpay client initialised.");
 }
 
-// ====== PRODUCTS ======
+// ====== PRODUCTS (LOCAL IMAGES) ======
 const PRODUCTS = [
   {
     id: "p001",
     name: "Al Aroma Garam Masala (100g)",
     price: 120.0,
-    img: "https://images.pexels.com/photos/1435895/pexels-photo-1435895.jpeg?auto=compress&cs=tinysrgb&w=600",
+    img: "/products/garam-masala.jpg",
     desc: "Premium garam masala for rich flavour in every dish.",
   },
   {
     id: "p002",
     name: "Al Aroma Turmeric Powder (200g)",
     price: 150.0,
-    img: "https://images.pexels.com/photos/4110254/pexels-photo-4110254.jpeg?auto=compress&cs=tinysrgb&w=600",
+    img: "/products/turmeric.jpg",
     desc: "Deep-coloured turmeric powder with natural aroma.",
   },
   {
     id: "p003",
     name: "Al Aroma Red Chili Powder (100g)",
     price: 80.0,
-    img: "https://images.pexels.com/photos/4199091/pexels-photo-4199091.jpeg?auto=compress&cs=tinysrgb&w=600",
+    img: "/products/red-chili.jpg",
     desc: "Spicy and fresh red chili powder for everyday cooking.",
   },
   {
     id: "p004",
     name: "Premium Dry Dates (Khajoor) 500g",
     price: 260.0,
-    img: "https://images.pexels.com/photos/4110460/pexels-photo-4110460.jpeg?auto=compress&cs=tinysrgb&w=600",
+    img: "/products/dates.jpg",
     desc: "Soft and sweet premium quality dates for snacking.",
   },
 ];
 
-// ====== COMMON PAGE LAYOUT ======
+// ====== COMMON LAYOUT FUNCTION ======
 function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = "" }) {
   return `<!doctype html>
 <html lang="en">
@@ -321,11 +321,40 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
       font-weight:600;
     }
     .cart-total-row { font-weight:700; }
-
     .cart-empty {
       text-align:center;
       padding:10px 4px;
       color:#777;
+    }
+
+    .qty-btn {
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid #ccc;
+      background:#f8f8ff;
+      font-size:11px;
+      cursor:pointer;
+      margin:0 4px;
+    }
+    .qty-btn:hover { background:#e8e8ff; }
+    .remove-btn {
+      padding:2px 7px;
+      border-radius:999px;
+      border:1px solid #f2b1b1;
+      background:#ffe5e5;
+      color:#a60000;
+      font-size:11px;
+      cursor:pointer;
+    }
+    .remove-btn:hover { background:#ffd0d0; }
+
+    .customer-input {
+      width:100%;
+      padding:8px;
+      border-radius:8px;
+      border:1px solid #ccc;
+      font-size:13px;
+      margin-bottom:6px;
     }
 
     footer {
@@ -375,7 +404,7 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
     <div class="topbar">
       <div>
         <div class="brand">
-          <img src="/logo.png" alt="Logo" class="brand-logo"/>
+          <img src="/logo.png" alt="Logo" class="brand-logo" onerror="this.style.display='none';"/>
           <div class="brand-title">
             <strong>AL-AROMA SPICES</strong>
             <span>${BRAND_TAGLINE}</span>
@@ -412,20 +441,20 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
 </html>`;
 }
 
-// ====== HOME PAGE ======
+// ====== HOME PAGE (PRODUCTS + CART + CUSTOMER DETAILS) ======
 app.get("/", (req, res) => {
   const productCards = PRODUCTS.map(
-    (p) => `
-      <div class="product-card">
-        <img src="${p.img}" alt="${p.name}"/>
-        <div class="product-name">${p.name}</div>
-        <div class="product-desc">${p.desc}</div>
-        <div class="product-price">₹ ${p.price.toFixed(2)}</div>
-        <div class="controls">
-          <input type="number" min="1" value="1" data-id="${p.id}" class="qty-input"/>
-          <button class="primary-btn addCartBtn" data-id="${p.id}">Add to cart</button>
-        </div>
-      </div>`
+    (p) =>
+      '<div class="product-card">' +
+      '<img src="' + p.img + '" alt="' + p.name + '"/>' +
+      '<div class="product-name">' + p.name + '</div>' +
+      '<div class="product-desc">' + p.desc + '</div>' +
+      '<div class="product-price">₹ ' + p.price.toFixed(2) + '</div>' +
+      '<div class="controls">' +
+        '<input type="number" min="1" value="1" data-id="' + p.id + '" class="qty-input"/>' +
+        '<button class="primary-btn addCartBtn" data-id="' + p.id + '">Add to cart</button>' +
+      '</div>' +
+      '</div>'
   ).join("\n");
 
   const bodyHtml = `
@@ -438,15 +467,17 @@ app.get("/", (req, res) => {
             <div class="pill">Pure & flavourful spices</div>
             <div class="pill">Premium dates & dry fruits</div>
             <div class="pill">Retail & bulk supply</div>
+            <div class="pill">Pan-India delivery*</div>
           </div>
         </div>
         <div class="hero-box">
           <strong>How to order:</strong>
           <ul>
             <li>Products se quantity choose karke <b>Add to cart</b> pe click karein.</li>
-            <li>Cart me items check karein, phir <b>Pay & Checkout</b> dabayein.</li>
+            <li>Customer details (naam, phone, address) fill karein.</li>
+            <li>Cart check karke <b>Pay & Checkout</b> dabayein.</li>
             <li>Payment Razorpay (UPI / Card / NetBanking) se hoga.</li>
-            <li>Payment ke baad aapke liye automatic <b>PDF invoice</b> generate hogi.</li>
+            <li>Payment ke baad automatic <b>PDF invoice</b> generate hogi.</li>
           </ul>
           <div style="font-size:11px;opacity:0.85;margin-top:6px;">
             *Delivery charges extra, as per location.
@@ -472,17 +503,18 @@ app.get("/", (req, res) => {
             <table class="cart-table">
               <thead>
                 <tr>
-                  <th style="width:55%;">Item</th>
-                  <th style="width:15%;">Qty</th>
-                  <th style="width:30%;">Total (₹)</th>
+                  <th style="width:45%;">Item</th>
+                  <th style="width:25%;">Qty</th>
+                  <th style="width:20%;">Total (₹)</th>
+                  <th style="width:10%;">Remove</th>
                 </tr>
               </thead>
               <tbody id="cart-body">
-                <tr><td colspan="3" class="cart-empty">No items in cart yet.</td></tr>
+                <tr><td colspan="4" class="cart-empty">No items in cart yet.</td></tr>
               </tbody>
               <tfoot>
                 <tr class="cart-total-row">
-                  <td colspan="2">Cart Total</td>
+                  <td colspan="3">Cart Total</td>
                   <td>₹ <span id="cart-total">0.00</span></td>
                 </tr>
               </tfoot>
@@ -494,6 +526,17 @@ app.get("/", (req, res) => {
           </div>
 
           <div class="card-soft">
+            <h3>Customer Details (for Invoice)</h3>
+            <p style="font-size:12px;color:#555;">
+              Kripya apna naam aur address sahi bharein. Yeh details aapke invoice par dikhenge.
+            </p>
+            <input id="cust-name" class="customer-input" type="text" placeholder="Full Name *" />
+            <input id="cust-phone" class="customer-input" type="text" placeholder="Phone / WhatsApp *" />
+            <input id="cust-email" class="customer-input" type="email" placeholder="Email (optional)" />
+            <textarea id="cust-address" class="customer-input" rows="3" placeholder="Full Address * (House no, Area, City, Pincode)"></textarea>
+
+            <hr style="margin:12px 0; border:none; border-top:1px dashed #ddd;"/>
+
             <h3>Delivery & Contact</h3>
             <ul>
               <li>Dispatch within 1–3 working days (ready stock).</li>
@@ -523,11 +566,16 @@ app.get("/", (req, res) => {
     const messageEl = document.getElementById('message');
     const checkoutBtn = document.getElementById('checkoutBtn');
 
+    const custNameInput = document.getElementById('cust-name');
+    const custPhoneInput = document.getElementById('cust-phone');
+    const custEmailInput = document.getElementById('cust-email');
+    const custAddressInput = document.getElementById('cust-address');
+
     function showMessage(html, timeout) {
       if (!messageEl) return;
       messageEl.innerHTML = html;
       if (timeout) {
-        setTimeout(() => { messageEl.innerHTML = ''; }, timeout);
+        setTimeout(function(){ messageEl.innerHTML = ''; }, timeout);
       }
     }
 
@@ -535,7 +583,7 @@ app.get("/", (req, res) => {
       if (!cartBody || !cartTotalEl) return;
 
       if (!cart.length) {
-        cartBody.innerHTML = '<tr><td colspan="3" class="cart-empty">No items in cart yet.</td></tr>';
+        cartBody.innerHTML = '<tr><td colspan="4" class="cart-empty">No items in cart yet.</td></tr>';
         cartTotalEl.textContent = '0.00';
         return;
       }
@@ -543,15 +591,23 @@ app.get("/", (req, res) => {
       let total = 0;
       let rows = '';
 
-      cart.forEach(item => {
-        const p = products.find(pr => pr.id === item.id);
+      cart.forEach(function(item) {
+        var p = products.find(function(pr){ return pr.id === item.id; });
         if (!p) return;
-        const lineTotal = p.price * item.qty;
+        var lineTotal = p.price * item.qty;
         total += lineTotal;
+
         rows += '<tr>' +
           '<td>' + p.name + '</td>' +
-          '<td>' + item.qty + '</td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button class="qty-btn" onclick="changeQty(\\'' + p.id + '\\', -1)">-</button>' +
+            '<span>' + item.qty + '</span>' +
+            '<button class="qty-btn" onclick="changeQty(\\'' + p.id + '\\', 1)">+</button>' +
+          '</td>' +
           '<td>' + lineTotal.toFixed(2) + '</td>' +
+          '<td style="text-align:center;">' +
+            '<button class="remove-btn" onclick="removeItem(\\'' + p.id + '\\')">✕</button>' +
+          '</td>' +
         '</tr>';
       });
 
@@ -561,22 +617,39 @@ app.get("/", (req, res) => {
 
     function addToCart(productId, qty) {
       if (qty <= 0) qty = 1;
-      const existing = cart.find(i => i.id === productId);
+      var existing = cart.find(function(i){ return i.id === productId; });
       if (existing) {
         existing.qty += qty;
       } else {
-        cart.push({ id: productId, qty });
+        cart.push({ id: productId, qty: qty });
       }
       renderCart();
       showMessage('Item added to cart.', 3000);
     }
 
-    addButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        const qtyInput = document.querySelector('input.qty-input[data-id="' + id + '"]') ||
-                         document.querySelector('input.qty-input[data-id="' + id + '"]');
-        let qty = 1;
+    function changeQty(productId, delta) {
+      var item = cart.find(function(i){ return i.id === productId; });
+      if (!item) return;
+      item.qty += delta;
+      if (item.qty <= 0) {
+        cart = cart.filter(function(i){ return i.id !== productId; });
+      }
+      renderCart();
+    }
+
+    function removeItem(productId) {
+      cart = cart.filter(function(i){ return i.id !== productId; });
+      renderCart();
+    }
+
+    window.changeQty = changeQty;
+    window.removeItem = removeItem;
+
+    addButtons.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var qtyInput = document.querySelector('input.qty-input[data-id="' + id + '"]');
+        var qty = 1;
         if (qtyInput && qtyInput.value) {
           qty = parseInt(qtyInput.value, 10);
         }
@@ -586,7 +659,7 @@ app.get("/", (req, res) => {
     });
 
     async function createOrderOnServer(payload) {
-      const res = await fetch('/create-order', {
+      var res = await fetch('/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -595,7 +668,7 @@ app.get("/", (req, res) => {
     }
 
     async function verifyPaymentOnServer(payload) {
-      const res = await fetch('/verify-payment', {
+      var res = await fetch('/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -604,20 +677,39 @@ app.get("/", (req, res) => {
     }
 
     if (checkoutBtn) {
-      checkoutBtn.addEventListener('click', async () => {
+      checkoutBtn.addEventListener('click', async function(){
         if (!cart.length) {
           showMessage('Your cart is empty.', 4000);
           return;
         }
 
-        const itemsForOrder = cart.map(c => ({ id: c.id, qty: c.qty }));
+        var custName = (custNameInput && custNameInput.value || '').trim();
+        var custPhone = (custPhoneInput && custPhoneInput.value || '').trim();
+        var custEmail = (custEmailInput && custEmailInput.value || '').trim();
+        var custAddress = (custAddressInput && custAddressInput.value || '').trim();
+
+        if (!custName || !custPhone || !custAddress) {
+          showMessage('Please fill Name, Phone and Address for invoice.', 5000);
+          return;
+        }
+
+        var customer = {
+          name: custName,
+          phone: custPhone,
+          email: custEmail,
+          address: custAddress
+        };
+
+        var itemsForOrder = cart.map(function(c){
+          return { id: c.id, qty: c.qty };
+        });
 
         showMessage('Creating order...');
-        let orderResp;
+        var orderResp;
         try {
           orderResp = await createOrderOnServer({ items: itemsForOrder });
-        } catch (err) {
-          console.error(err);
+        } catch (e) {
+          console.error(e);
           showMessage('Network/server error. Please try again.', 9000);
           return;
         }
@@ -627,8 +719,8 @@ app.get("/", (req, res) => {
           return;
         }
 
-        const detailedItems = cart.map(c => {
-          const p = products.find(pr => pr.id === c.id);
+        var detailedItems = cart.map(function(c){
+          var p = products.find(function(pr){ return pr.id === c.id; });
           if (!p) return null;
           return {
             id: p.id,
@@ -638,7 +730,7 @@ app.get("/", (req, res) => {
           };
         }).filter(Boolean);
 
-        const options = {
+        var options = {
           key: orderResp.key,
           amount: orderResp.amount,
           currency: orderResp.currency,
@@ -648,16 +740,17 @@ app.get("/", (req, res) => {
           handler: async function (response) {
             showMessage('Verifying payment, please wait...');
             try {
-              const verifyResp = await verifyPaymentOnServer({
+              var verifyResp = await verifyPaymentOnServer({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                items: detailedItems
+                items: detailedItems,
+                customer: customer
               });
               if (verifyResp && verifyResp.success) {
                 cart = [];
                 renderCart();
-                const link = verifyResp.invoiceUrl
+                var link = verifyResp.invoiceUrl
                   ? '<a href="' + verifyResp.invoiceUrl + '" target="_blank">Download Invoice</a>'
                   : '';
                 showMessage('Payment successful! ' + link, 15000);
@@ -670,15 +763,15 @@ app.get("/", (req, res) => {
             }
           },
           prefill: {
-            name: '',
-            email: '',
-            contact: ''
+            name: custName,
+            email: custEmail,
+            contact: custPhone
           },
           notes: {},
           theme: { color: '#ff7a00' }
         };
 
-        const rzpObj = new Razorpay(options);
+        var rzpObj = new Razorpay(options);
         rzpObj.open();
       });
     }
@@ -795,7 +888,7 @@ app.get("/contact", (req, res) => {
   );
 });
 
-// ====== CREATE ORDER ======
+// ====== CREATE ORDER (SERVER SIDE) ======
 app.post("/create-order", async (req, res) => {
   try {
     if (!rzp) {
@@ -844,7 +937,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-// ====== VERIFY PAYMENT + GENERATE INVOICE ======
+// ====== VERIFY PAYMENT + GENERATE INVOICE (WITH BILL TO + QR) ======
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -852,6 +945,7 @@ app.post("/verify-payment", async (req, res) => {
       razorpay_payment_id,
       razorpay_signature,
       items,
+      customer,
     } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -869,6 +963,7 @@ app.post("/verify-payment", async (req, res) => {
     }
 
     const safeItems = Array.isArray(items) ? items : [];
+    const safeCustomer = customer || {};
 
     const invoiceId = `INV-${Date.now()}`;
     const invoiceFilename = `invoice_${razorpay_order_id}.pdf`;
@@ -878,12 +973,10 @@ app.post("/verify-payment", async (req, res) => {
     const writeStream = fs.createWriteStream(invoicePath);
     doc.pipe(writeStream);
 
-    // HEADER with logo + title
-    const logoPath = path.join(PUBLIC_DIR, "logo.png");
+    // HEADER with logo + brand
     let currentY = 40;
-
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 40, currentY, { width: 70 });
+    if (fs.existsSync(LOGO_PATH)) {
+      doc.image(LOGO_PATH, 40, currentY, { width: 70 });
     }
 
     doc
@@ -892,20 +985,22 @@ app.post("/verify-payment", async (req, res) => {
       .fontSize(10)
       .fillColor("#555")
       .text(ADDRESS_LINE, 130, currentY + 34, { align: "left" })
-      .text(`Phone: ${PHONE_DISPLAY}`, 130, currentY + 48)
-      .text(`Email: ${EMAIL_ID}`, 130, currentY + 60);
+      .text("Phone: " + PHONE_DISPLAY, 130, currentY + 48)
+      .text("Email: " + EMAIL_ID, 130, currentY + 60);
 
-    currentY += 80;
-
-    // QR code (payment info)
-    const qrText = `Invoice: ${invoiceId}
-Order: ${razorpay_order_id}
-Amount paid via Razorpay.`;
+    // QR code with basic order info
+    const qrText =
+      "Invoice: " + invoiceId +
+      "\\nOrder: " + razorpay_order_id +
+      "\\nPayment: " + razorpay_payment_id +
+      "\\nAmount: " + (safeItems.reduce(function(sum, it){ return sum + (Number(it.unitPrice || 0) * Number(it.quantity || 1)); }, 0)).toFixed(2) +
+      "\\nCustomer: " + (safeCustomer.name || "");
     const qrDataUrl = await QRCode.toDataURL(qrText);
     const qrBase64 = qrDataUrl.split(",")[1];
     const qrBuffer = Buffer.from(qrBase64, "base64");
+    doc.image(qrBuffer, 420, 40, { width: 100 });
 
-    doc.image(qrBuffer, 420, 40, { width: 120 });
+    currentY += 80;
 
     // Invoice meta
     doc
@@ -915,14 +1010,25 @@ Amount paid via Razorpay.`;
 
     doc
       .fontSize(10)
-      .text(`Invoice No: ${invoiceId}`, 40, currentY + 22)
-      .text(`Order ID: ${razorpay_order_id}`, 40, currentY + 36)
-      .text(`Payment ID: ${razorpay_payment_id}`, 40, currentY + 50)
-      .text(`Date: ${new Date().toLocaleString()}`, 40, currentY + 64);
+      .text("Invoice No: " + invoiceId, 40, currentY + 22)
+      .text("Order ID: " + razorpay_order_id, 40, currentY + 36)
+      .text("Payment ID: " + razorpay_payment_id, 40, currentY + 50)
+      .text("Date: " + new Date().toLocaleString(), 40, currentY + 64);
 
     currentY += 96;
 
-    // Items table borders
+    // Bill To
+    doc
+      .fontSize(12)
+      .text("Bill To:", 40, currentY)
+      .fontSize(10)
+      .text(safeCustomer.name || "Customer Name")
+      .text("Phone: " + (safeCustomer.phone || ""))
+      .text("Email: " + (safeCustomer.email || ""))
+      .text("Address: " + (safeCustomer.address || ""));
+    currentY += 70;
+
+    // Items table
     const tableTop = currentY;
     const tableLeft = 40;
     const tableRight = 550;
@@ -943,7 +1049,7 @@ Amount paid via Razorpay.`;
     let rowY = tableTop + 22;
     let grandTotal = 0;
 
-    safeItems.forEach((item) => {
+    safeItems.forEach(function(item) {
       const qty = Number(item.quantity || 1);
       const unit = Number(item.unitPrice || 0);
       const lineTotal = qty * unit;
@@ -955,6 +1061,7 @@ Amount paid via Razorpay.`;
 
       doc
         .fillColor("#000")
+        .fontSize(10)
         .text(item.name || "Product", tableLeft + 6, rowY)
         .text(qty.toString(), 340, rowY)
         .text(unit.toFixed(2), 390, rowY)
@@ -974,7 +1081,7 @@ Amount paid via Razorpay.`;
     doc
       .text("Subtotal:", 390, rowY + 8)
       .text("₹ " + grandTotal.toFixed(2), 470, rowY + 8, { align: "right" })
-      .text("GST (0%):", 390, rowY + 24)
+      .text("GST (included where applicable):", 390, rowY + 24)
       .text("₹ 0.00", 470, rowY + 24, { align: "right" })
       .font("Helvetica-Bold")
       .text("Grand Total:", 390, rowY + 38)
@@ -995,13 +1102,13 @@ Amount paid via Razorpay.`;
 
     doc.end();
 
-    writeStream.on("finish", () => {
+    writeStream.on("finish", function () {
       const invoiceUrl = "/invoices/" + invoiceFilename;
       console.log("Invoice generated:", invoicePath);
-      res.json({ success: true, invoiceUrl });
+      res.json({ success: true, invoiceUrl: invoiceUrl });
     });
 
-    writeStream.on("error", (err) => {
+    writeStream.on("error", function (err) {
       console.error("Invoice write error", err);
       res.status(500).json({ error: "Invoice generation failed" });
     });
@@ -1015,7 +1122,7 @@ Amount paid via Razorpay.`;
 
 // ====== START SERVER ======
 app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+  console.log("Server listening on http://localhost:" + PORT);
   console.log(
     "Ensure you set RZP_KEY_ID and RZP_KEY_SECRET in .env or Render env vars."
   );
