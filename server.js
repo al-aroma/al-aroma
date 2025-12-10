@@ -43,7 +43,7 @@ if (!fs.existsSync(PUBLIC_DIR)) {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Static files
+// Static files (logo + product images)
 app.use(express.static(PUBLIC_DIR));
 // Serve invoice PDFs
 app.use("/invoices", express.static(INVOICES_DIR));
@@ -69,7 +69,7 @@ if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
 }
 
 // ====== PRODUCTS (LOCAL IMAGES) ======
-const PRODUCTS = [
+let PRODUCTS = [
   {
     id: "p001",
     name: "Al Aroma Garam Masala (100g)",
@@ -269,6 +269,11 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
       display:flex;
       flex-direction:column;
       gap:8px;
+      transition:transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .product-card:hover {
+      transform:translateY(-2px);
+      box-shadow:0 14px 34px rgba(15,18,40,0.14);
     }
     .product-card img {
       width:100%;
@@ -357,6 +362,9 @@ function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = ""
     .cart-table th {
       background:#f5f6ff;
       font-weight:600;
+    }
+    .cart-table tbody tr:hover {
+      background:#faf7ff;
     }
     .cart-total-row { font-weight:700; }
     .cart-empty {
@@ -1003,7 +1011,7 @@ app.get("/contact", (req, res) => {
   );
 });
 
-// ====== SIMPLE ADMIN PAGE (list invoices) ======
+// ====== SIMPLE ADMIN PAGE (Invoices list) ======
 app.get("/admin", (req, res) => {
   const key = (req.query.key || "").trim();
   if (key !== ADMIN_KEY) {
@@ -1054,6 +1062,10 @@ app.get("/admin", (req, res) => {
         Simple admin view. Only you should know this URL and admin key.
       </div>
 
+      <p style="font-size:13px;margin-bottom:10px;">
+        <a href="/admin/products?key=${key}">➡ Go to Product Manager</a>
+      </p>
+
       <div class="card-soft">
         <p><b>Total invoices:</b> ${totalCount}</p>
         ${
@@ -1095,6 +1107,149 @@ app.get("/admin", (req, res) => {
       bodyHtml,
     })
   );
+});
+
+// ====== PRODUCT ADMIN PAGE (add/delete products) ======
+app.get("/admin/products", (req, res) => {
+  const key = (req.query.key || "").trim();
+  if (key !== ADMIN_KEY) {
+    return res
+      .status(401)
+      .send(
+        "<h2>Unauthorized</h2><p>Admin key required. Open: /admin/products?key=YOUR_ADMIN_KEY</p>"
+      );
+  }
+
+  const rows = PRODUCTS.map((p, index) => {
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${p.id}</td>
+        <td>${p.name}</td>
+        <td>₹ ${p.price.toFixed(2)}</td>
+        <td>${p.img}</td>
+        <td>${p.desc}</td>
+        <td>
+          <form method="post" action="/admin/products?key=${encodeURIComponent(
+            key
+          )}" style="display:inline;">
+            <input type="hidden" name="action" value="delete"/>
+            <input type="hidden" name="id" value="${p.id}"/>
+            <button type="submit" class="remove-btn">Delete</button>
+          </form>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  const bodyHtml = `
+    <main class="container">
+      <h2 class="section-title">Admin — Products</h2>
+      <div class="section-sub">
+        Yahan se aap products add/delete kar sakte hain. (Note: changes server restart ke baad reset ho sakte hain.)
+      </div>
+
+      <p style="font-size:13px;margin-bottom:10px;">
+        <a href="/admin?key=${key}">⬅ Back to Invoice Admin</a>
+      </p>
+
+      <div class="card-soft" style="margin-bottom:18px;">
+        <h3>Add Product</h3>
+        <form method="post" action="/admin/products?key=${encodeURIComponent(
+          key
+        )}" style="display:grid;gap:8px;max-width:480px;margin-top:6px;">
+          <input type="text" name="name" placeholder="Product name *" required
+            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+          <input type="number" step="0.01" min="0" name="price" placeholder="Price in ₹ *" required
+            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+          <input type="text" name="img" placeholder="Image path (e.g. /products/new.jpg)" 
+            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+          <textarea name="desc" rows="3" placeholder="Short description"
+            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"></textarea>
+          <button type="submit" name="action" value="add" class="primary-btn" style="width:fit-content;">
+            Add Product
+          </button>
+        </form>
+        <p style="font-size:11px;color:#777;margin-top:6px;">
+          Tip: Agar aap local image use kar rahe hain, to file <code>public/products</code> folder me rakhein
+          aur yaha <code>/products/filename.jpg</code> path likhein.
+        </p>
+      </div>
+
+      <div class="card-soft">
+        <h3>Current Products</h3>
+        ${
+          PRODUCTS.length === 0
+            ? "<p style='font-size:12px;color:#777;'>No products available. Add a product above.</p>"
+            : `
+          <div style="overflow-x:auto;margin-top:6px;">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Image</th>
+                  <th>Description</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        `
+        }
+      </div>
+    </main>
+  `;
+
+  res.send(
+    renderPage({
+      title: "Admin — Products",
+      active: "",
+      bodyHtml,
+    })
+  );
+});
+
+app.post("/admin/products", (req, res) => {
+  const key = (req.query.key || "").trim();
+  if (key !== ADMIN_KEY) {
+    return res.status(401).send("Unauthorized");
+  }
+
+  const action = req.body.action;
+  if (action === "add") {
+    const name = (req.body.name || "").trim();
+    const priceRaw = req.body.price;
+    const img = (req.body.img || "").trim() || "/products/placeholder.jpg";
+    const desc = (req.body.desc || "").trim();
+
+    const price = parseFloat(priceRaw);
+    if (!name || isNaN(price) || price <= 0) {
+      // basic validation fail, just redirect back
+      return res.redirect("/admin/products?key=" + encodeURIComponent(key));
+    }
+
+    const id = "p" + Date.now();
+    PRODUCTS.push({
+      id,
+      name,
+      price,
+      img,
+      desc,
+    });
+  } else if (action === "delete") {
+    const id = (req.body.id || "").trim();
+    if (id) {
+      PRODUCTS = PRODUCTS.filter((p) => p.id !== id);
+    }
+  }
+
+  res.redirect("/admin/products?key=" + encodeURIComponent(key));
 });
 
 // ====== CREATE ORDER ======
