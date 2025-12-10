@@ -1,0 +1,30 @@
+[
+  {
+    "id": "p001",
+    "name": "Al Aroma Garam Masala (100g)",
+    "price": 120,
+    "img": "/products/garam-masala.jpg",
+    "desc": "Premium garam masala for rich flavour in every dish."
+  },
+  {
+    "id": "p002",
+    "name": "Al Aroma Turmeric Powder (200g)",
+    "price": 150,
+    "img": "/products/turmeric.jpg",
+    "desc": "Deep-coloured turmeric powder with natural aroma."
+  },
+  {
+    "id": "p003",
+    "name": "Al Aroma Red Chili Powder (100g)",
+    "price": 80,
+    "img": "/products/red-chili.jpg",
+    "desc": "Spicy and fresh red chili powder for everyday cooking."
+  },
+  {
+    "id": "p004",
+    "name": "Premium Dry Dates (Khajoor) 500g",
+    "price": 260,
+    "img": "/products/dates.jpg",
+    "desc": "Soft and sweet premium quality dates for snacking."
+  }
+]

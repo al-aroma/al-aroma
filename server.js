@@ -31,6 +31,7 @@ const ROOT_DIR = __dirname;
 const INVOICES_DIR = path.join(ROOT_DIR, "invoices");
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const LOGO_PATH = path.join(PUBLIC_DIR, "logo.png");
+const DATA_FILE = path.join(ROOT_DIR, "products.json");
 
 if (!fs.existsSync(INVOICES_DIR)) {
   fs.mkdirSync(INVOICES_DIR, { recursive: true });
@@ -68,8 +69,8 @@ if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
   console.log("✅ Razorpay client initialised.");
 }
 
-// ====== PRODUCTS (LOCAL IMAGES) ======
-let PRODUCTS = [
+// ====== DEFAULT PRODUCTS (if products.json not found) ======
+const DEFAULT_PRODUCTS = [
   {
     id: "p001",
     name: "Al Aroma Garam Masala (100g)",
@@ -99,6 +100,40 @@ let PRODUCTS = [
     desc: "Soft and sweet premium quality dates for snacking.",
   },
 ];
+
+let PRODUCTS = [];
+
+// ====== PRODUCT PERSISTENCE HELPERS ======
+function saveProducts() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(PRODUCTS, null, 2), "utf8");
+  } catch (err) {
+    console.error("Error saving products.json:", err);
+  }
+}
+
+function loadProducts() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = fs.readFileSync(DATA_FILE, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        PRODUCTS = parsed;
+        console.log(`Loaded ${PRODUCTS.length} products from products.json`);
+        return;
+      }
+    }
+    PRODUCTS = DEFAULT_PRODUCTS;
+    saveProducts();
+    console.log("Using DEFAULT_PRODUCTS and wrote products.json");
+  } catch (err) {
+    console.error("Error loading products.json, falling back to defaults:", err);
+    PRODUCTS = DEFAULT_PRODUCTS;
+  }
+}
+
+// Load products on startup
+loadProducts();
 
 // ====== COMMON LAYOUT FUNCTION ======
 function renderPage({ title, active, bodyHtml, extraHead = "", extraScripts = "" }) {
@@ -1109,9 +1144,11 @@ app.get("/admin", (req, res) => {
   );
 });
 
-// ====== PRODUCT ADMIN PAGE (add/delete products) ======
+// ====== PRODUCT ADMIN PAGE (add/edit/delete products) ======
 app.get("/admin/products", (req, res) => {
   const key = (req.query.key || "").trim();
+  const editId = (req.query.editId || "").trim();
+
   if (key !== ADMIN_KEY) {
     return res
       .status(401)
@@ -1119,6 +1156,8 @@ app.get("/admin/products", (req, res) => {
         "<h2>Unauthorized</h2><p>Admin key required. Open: /admin/products?key=YOUR_ADMIN_KEY</p>"
       );
   }
+
+  const productToEdit = PRODUCTS.find((p) => p.id === editId);
 
   const rows = PRODUCTS.map((p, index) => {
     return `
@@ -1130,6 +1169,9 @@ app.get("/admin/products", (req, res) => {
         <td>${p.img}</td>
         <td>${p.desc}</td>
         <td>
+          <a href="/admin/products?key=${encodeURIComponent(
+            key
+          )}&editId=${encodeURIComponent(p.id)}" style="font-size:11px;margin-right:6px;">Edit</a>
           <form method="post" action="/admin/products?key=${encodeURIComponent(
             key
           )}" style="display:inline;">
@@ -1142,11 +1184,70 @@ app.get("/admin/products", (req, res) => {
     `;
   }).join("");
 
+  const addEditFormHtml = productToEdit
+    ? `
+      <h3>Edit Product</h3>
+      <form method="post" action="/admin/products?key=${encodeURIComponent(
+        key
+      )}" style="display:grid;gap:8px;max-width:480px;margin-top:6px;">
+        <input type="hidden" name="action" value="update"/>
+        <input type="hidden" name="id" value="${productToEdit.id}"/>
+
+        <input type="text" name="name" placeholder="Product name *" required
+          value="${productToEdit.name.replace(/"/g, "&quot;")}"
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+
+        <input type="number" step="0.01" min="0" name="price" placeholder="Price in ₹ *" required
+          value="${productToEdit.price}"
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+
+        <input type="text" name="img" placeholder="Image path (e.g. /products/new.jpg)" 
+          value="${productToEdit.img.replace(/"/g, "&quot;")}"
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+
+        <textarea name="desc" rows="3" placeholder="Short description"
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;">${productToEdit.desc}</textarea>
+
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button type="submit" class="primary-btn" style="width:fit-content;">
+            Save Changes
+          </button>
+          <a href="/admin/products?key=${encodeURIComponent(
+            key
+          )}" style="font-size:12px;">Cancel</a>
+        </div>
+      </form>
+    `
+    : `
+      <h3>Add Product</h3>
+      <form method="post" action="/admin/products?key=${encodeURIComponent(
+        key
+      )}" style="display:grid;gap:8px;max-width:480px;margin-top:6px;">
+        <input type="hidden" name="action" value="add"/>
+
+        <input type="text" name="name" placeholder="Product name *" required
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+
+        <input type="number" step="0.01" min="0" name="price" placeholder="Price in ₹ *" required
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+
+        <input type="text" name="img" placeholder="Image path (e.g. /products/new.jpg)" 
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
+
+        <textarea name="desc" rows="3" placeholder="Short description"
+          style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"></textarea>
+
+        <button type="submit" class="primary-btn" style="width:fit-content;">
+          Add Product
+        </button>
+      </form>
+    `;
+
   const bodyHtml = `
     <main class="container">
       <h2 class="section-title">Admin — Products</h2>
       <div class="section-sub">
-        Yahan se aap products add/delete kar sakte hain. (Note: changes server restart ke baad reset ho sakte hain.)
+        Yahan se aap products add, edit aur delete kar sakte hain. Ye products <code>products.json</code> file me save hote hain.
       </div>
 
       <p style="font-size:13px;margin-bottom:10px;">
@@ -1154,22 +1255,7 @@ app.get("/admin/products", (req, res) => {
       </p>
 
       <div class="card-soft" style="margin-bottom:18px;">
-        <h3>Add Product</h3>
-        <form method="post" action="/admin/products?key=${encodeURIComponent(
-          key
-        )}" style="display:grid;gap:8px;max-width:480px;margin-top:6px;">
-          <input type="text" name="name" placeholder="Product name *" required
-            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
-          <input type="number" step="0.01" min="0" name="price" placeholder="Price in ₹ *" required
-            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
-          <input type="text" name="img" placeholder="Image path (e.g. /products/new.jpg)" 
-            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"/>
-          <textarea name="desc" rows="3" placeholder="Short description"
-            style="padding:8px;border-radius:8px;border:1px solid #ccc;font-size:13px;"></textarea>
-          <button type="submit" name="action" value="add" class="primary-btn" style="width:fit-content;">
-            Add Product
-          </button>
-        </form>
+        ${addEditFormHtml}
         <p style="font-size:11px;color:#777;margin-top:6px;">
           Tip: Agar aap local image use kar rahe hain, to file <code>public/products</code> folder me rakhein
           aur yaha <code>/products/filename.jpg</code> path likhein.
@@ -1221,7 +1307,8 @@ app.post("/admin/products", (req, res) => {
     return res.status(401).send("Unauthorized");
   }
 
-  const action = req.body.action;
+  const action = (req.body.action || "").trim();
+
   if (action === "add") {
     const name = (req.body.name || "").trim();
     const priceRaw = req.body.price;
@@ -1230,22 +1317,37 @@ app.post("/admin/products", (req, res) => {
 
     const price = parseFloat(priceRaw);
     if (!name || isNaN(price) || price <= 0) {
-      // basic validation fail, just redirect back
       return res.redirect("/admin/products?key=" + encodeURIComponent(key));
     }
 
     const id = "p" + Date.now();
-    PRODUCTS.push({
-      id,
-      name,
-      price,
-      img,
-      desc,
-    });
+    PRODUCTS.push({ id, name, price, img, desc });
+    saveProducts();
   } else if (action === "delete") {
     const id = (req.body.id || "").trim();
     if (id) {
       PRODUCTS = PRODUCTS.filter((p) => p.id !== id);
+      saveProducts();
+    }
+  } else if (action === "update") {
+    const id = (req.body.id || "").trim();
+    const name = (req.body.name || "").trim();
+    const priceRaw = req.body.price;
+    const img = (req.body.img || "").trim() || "/products/placeholder.jpg";
+    const desc = (req.body.desc || "").trim();
+    const price = parseFloat(priceRaw);
+
+    if (!id || !name || isNaN(price) || price <= 0) {
+      return res.redirect("/admin/products?key=" + encodeURIComponent(key));
+    }
+
+    const idx = PRODUCTS.findIndex((p) => p.id === id);
+    if (idx !== -1) {
+      PRODUCTS[idx].name = name;
+      PRODUCTS[idx].price = price;
+      PRODUCTS[idx].img = img;
+      PRODUCTS[idx].desc = desc;
+      saveProducts();
     }
   }
 
